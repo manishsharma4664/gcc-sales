@@ -70,7 +70,7 @@ textarea{width:100%;font-size:15px;padding:10px;border:1px solid #cfd6e6;border-
 const SUPABASE_URL='https://pfioweulcnuaeumddals.supabase.co';
 const SUPABASE_KEY='sb_publishable_PsdVIkCf_BRD6Obk1eunNw_JTmyPdnk';
 const TEAM_NAME='Email team';
-const VERSION='v3 - 21 Nov 2026';
+const VERSION='v4 - 21 Nov 2026';
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -366,7 +366,9 @@ function viewEntry(){
     const on=res[m]>0;
     h+='<div class="res"><input type="checkbox" id="r_'+m+'"'+(on?' checked':'')+' onchange="$(\'#c_'+m+'\').style.display=this.checked?\'block\':\'none\'"><span>'+monLabel(m)+' '+m.slice(0,4)+'</span><input type="number" inputmode="numeric" min="1" id="c_'+m+'" value="'+(on?res[m]:1)+'" style="display:'+(on?'block':'none')+'"></div>';
   });
-  h+='<div id="eerr"></div><div style="height:14px"></div><button onclick="saveEntry()"'+(allowed?'':' disabled style="opacity:.5"')+'>Save entry</button></div></div>';
+  h+='<div id="eerr"></div><div style="height:14px"></div><button onclick="saveEntry()"'+(allowed?'':' disabled style="opacity:.5"')+'>Save entry</button>';
+  if(lead&&e.id)h+='<div style="height:10px"></div><button class="warn" onclick="delEntry(\''+e.id+'\')">Delete this entry</button>';
+  h+='</div></div>';
   return h;
 }
 async function saveEntry(){
@@ -450,7 +452,13 @@ function viewAdmin(){
     h+='<label>'+esc(a.name)+' (₹)</label><input id="op_'+a.id+'" type="number" inputmode="decimal" min="0" value="'+opening(a.id,m)+'">';
   });
   h+='<div style="height:12px"></div><button onclick="saveOpenings()">Save MTD brought forward</button></div>';
-  h+='<div class="card"><h2>Export</h2><button class="sec" onclick="exportCsv()">Download all entries (CSV)</button></div><div class="ver">'+VERSION+'</div></div>';
+  h+='<div class="card"><h2>Export</h2><button class="sec" onclick="exportCsv()">Download all entries (CSV)</button></div>';
+  h+='<div class="card" style="border:1px solid #f1b4b4"><h2 style="color:#a32d2d">Clear data</h2><div class="note">Deleted data cannot be brought back. Download the CSV first if you need a copy. Names and PINs are not touched.</div>'+
+    '<label>What to clear</label><select id="clr_mode" onchange="clrMode()"><option value="assoc">One associate (all entries and MTD brought forward)</option><option value="date">One date (all associates)</option><option value="all">Everything (all entries and MTD brought forward)</option></select>'+
+    '<div id="clr_assoc"><label>Associate</label><select id="clr_a">'+S.assocs.map(a=>'<option value="'+a.id+'">'+esc(a.name)+'</option>').join('')+'</select></div>'+
+    '<div id="clr_date" style="display:none"><label>Date</label><input type="date" id="clr_d" value="'+today()+'"></div>'+
+    '<label>Type DELETE to confirm</label><input id="clr_t" autocomplete="off" placeholder="DELETE"><div style="height:12px"></div>'+
+    '<button style="background:#c93a3a" onclick="doClear()">Clear data</button></div><div class="ver">'+VERSION+'</div></div>';
   return h;
 }
 async function patchAssoc(id,body,okMsg){
@@ -472,6 +480,24 @@ function toggleAdmin(id){
 function toggleCounts(id){
   const a=S.assocs.find(x=>x.id===id);
   patchAssoc(id,{reports:!counts(a)},counts(a)?'Excluded from team numbers':'Now counted in team numbers');
+}
+function clrMode(){const m=$('#clr_mode').value;$('#clr_assoc').style.display=m==='assoc'?'block':'none';$('#clr_date').style.display=m==='date'?'block':'none'}
+function delErr(e){return /permission denied/i.test(e.message)?'Delete permission is not enabled in Supabase yet. Run the grant delete SQL first.':'Error: '+e.message}
+async function delRows(path){const r=await api(path,{method:'DELETE',prefer:'return=representation'});return Array.isArray(r)?r.length:0}
+async function doClear(){
+  const mode=$('#clr_mode').value;
+  if($('#clr_t').value.trim()!=='DELETE')return toast('Type DELETE in capital letters to confirm.',4000);
+  try{
+    let n=0;
+    if(mode==='assoc'){const id=$('#clr_a').value;n=await delRows('daily_entries?associate_id=eq.'+id);n+=await delRows('mtd_openings?associate_id=eq.'+id)}
+    else if(mode==='date'){const d=$('#clr_d').value;if(!d)return toast('Pick a date.');n=await delRows('daily_entries?entry_date=eq.'+d)}
+    else{n=await delRows('daily_entries?id=not.is.null');n+=await delRows('mtd_openings?associate_id=not.is.null')}
+    await loadAll();toast('Cleared '+n+' record'+(n===1?'':'s'),4000);render();
+  }catch(e){toast(delErr(e),7000)}
+}
+async function delEntry(id){
+  if(!confirm('Delete this entry? This cannot be undone.'))return;
+  try{await delRows('daily_entries?id=eq.'+id);await loadAll();toast('Entry deleted');render()}catch(e){toast(delErr(e),7000)}
 }
 async function toggleActive(id){const a=S.assocs.find(x=>x.id===id);try{await api('associates?id=eq.'+id,{method:'PATCH',body:{active:!a.active}});await loadAll();render()}catch(e){toast('Error: '+e.message,5000)}}
 async function resetPin(id){if(!confirm('Reset this PIN? They will create a new one at next sign-in.'))return;try{await api('associates?id=eq.'+id,{method:'PATCH',body:{pin:null}});await loadAll();toast('PIN reset');render()}catch(e){toast('Error: '+e.message,5000)}}
