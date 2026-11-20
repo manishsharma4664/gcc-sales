@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14215f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sales Update">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>GCC Daily Sales Update</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f3f5fb;color:#111827;font-size:16px}
+.top{background:linear-gradient(135deg,#14215f,#2a78d6);color:#fff;padding:14px 16px 12px;position:sticky;top:0;z-index:5}
+.top h1{margin:0;font-size:18px;font-weight:600}
+.top .sub{font-size:13px;opacity:.85;margin-top:2px;display:flex;justify-content:space-between;gap:8px}
+.top a{color:#fff;text-decoration:underline;cursor:pointer}
+.tabs{display:flex;gap:6px;padding:10px 12px 0;overflow-x:auto}
+.tab{flex:1;white-space:nowrap;text-align:center;padding:10px 12px;border-radius:10px;background:#e3e8f5;color:#14215f;font-size:14px;font-weight:600;cursor:pointer}
+.tab.on{background:#14215f;color:#fff}
+.wrap{padding:12px;max-width:640px;margin:0 auto}
+.card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(20,33,95,.08)}
+.card h2{margin:0 0 10px;font-size:16px}
+label{display:block;font-size:13px;color:#6b7280;margin:12px 0 4px}
+input,select{width:100%;font-size:17px;padding:12px;border:1px solid #cfd6e6;border-radius:10px;background:#fff;color:#111827}
+input[type=checkbox]{width:22px;height:22px;margin:0}
+button{font-size:16px;font-weight:600;padding:13px 16px;border-radius:12px;border:0;background:#2a78d6;color:#fff;cursor:pointer;width:100%}
+button.sec{background:#e3e8f5;color:#14215f}
+button.sm{width:auto;padding:8px 12px;font-size:14px}
+button.warn{background:#fde8e8;color:#a32d2d}
+.row{display:flex;gap:8px;align-items:center}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:#f3f5fb;border-radius:10px;padding:10px;border-left:5px solid #2a78d6}
+.stat small{display:block;color:#6b7280;font-size:12px}
+.stat b{font-size:22px}
+.names button{margin-bottom:8px;background:#fff;color:#14215f;border:1px solid #cfd6e6;text-align:left}
+.res{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #eef1f8}
+.res span{flex:1}
+.res input[type=number]{width:90px;padding:8px}
+.note{background:#fff7e0;color:#7a5200;border-radius:10px;padding:10px;font-size:14px;margin:10px 0}
+.err{background:#fde8e8;color:#a32d2d;border-radius:10px;padding:10px;font-size:14px;margin:10px 0}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:8px 4px;text-align:right;border-bottom:1px solid #eef1f8}
+td:first-child,th:first-child{text-align:left}
+th{color:#6b7280;font-weight:500;font-size:12px}
+.ok{color:#0f7a54;font-weight:600}.pend{color:#b45309;font-weight:600}
+canvas{width:100%;height:auto;border-radius:12px;display:block}
+.bars{display:flex;align-items:flex-end;gap:6px;height:130px;margin-top:8px}
+.bars div{flex:1;text-align:center;font-size:11px;color:#6b7280}
+.bars i{display:block;background:#9db8ea;border-radius:4px 4px 0 0;margin-top:2px}
+.bars div.t i{background:#eb6834}
+textarea{width:100%;font-size:15px;padding:10px;border:1px solid #cfd6e6;border-radius:10px;font-family:inherit;color:#111827;line-height:1.45}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.grid3 button{padding:12px 6px;font-size:14px}
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:8px;background:#e3ecfb;color:#14215f;margin-left:6px;font-weight:600}
+.badge.g{background:#eef1f8;color:#6b7280}
+.arow{padding:10px 0;border-bottom:1px solid #eef1f8}
+.arow .btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.ver{text-align:center;font-size:11px;color:#9aa3b5;padding:12px}
+#toast{position:fixed;left:12px;right:12px;bottom:18px;background:#111827;color:#fff;padding:12px 14px;border-radius:12px;font-size:15px;display:none;z-index:20;text-align:center}
+.center{text-align:center;padding:40px 16px;color:#6b7280}
+</style>
+</head>
+<body>
+<div id="app"><div class="center">Loading…</div></div>
+<div id="toast"></div>
+<script>
+const SUPABASE_URL='https://pfioweulcnuaeumddals.supabase.co';
+const SUPABASE_KEY='sb_publishable_PsdVIkCf_BRD6Obk1eunNw_JTmyPdnk';
+const TEAM_NAME='Email team';
+const VERSION='v4 - 21 Nov 2026';
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pad=n=>String(n).padStart(2,'0');
+const ymd=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today=()=>ymd(new Date());
+const addDays=(s,n)=>{const d=new Date(s+'T00:00:00');d.setDate(d.getDate()+n);return ymd(d)};
+const monthOf=s=>s.slice(0,7);
+const daysInMonth=m=>{const p=m.split('-').map(Number);return new Date(p[0],p[1],0).getDate()};
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const monLabel=m=>MON[+m.slice(5,7)-1];
+const nextMonth=m=>{const p=m.split('-').map(Number);const d=new Date(p[0],p[1],1);return d.getFullYear()+'-'+pad(d.getMonth()+1)};
+const fmtINR=n=>Math.round(+n||0).toLocaleString('en-IN');
+const lacs=n=>+((+n||0)/100000).toFixed(2);
+const fmtLacs=n=>lacs(n)+' lacs';
+const longDate=d=>new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+const sum=(a,k)=>a.reduce((s,x)=>s+(+x[k]||0),0);
+
+let S={assocs:[],entries:[],openings:[],me:null,tab:'entry',date:today(),viewDate:today(),entryAssoc:null,from:today(),loadErr:null,pending:null,share:null,repMonth:null};
+
+async function api(path,opt){
+  opt=opt||{};
+  const h={apikey:SUPABASE_KEY,'Content-Type':'application/json'};
+  if(opt.prefer)h.Prefer=opt.prefer;
+  const r=await fetch(SUPABASE_URL+'/rest/v1/'+path,{method:opt.method||'GET',headers:h,body:opt.body?JSON.stringify(opt.body):undefined});
+  const t=await r.text();
+  if(!r.ok)throw new Error(t||('HTTP '+r.status));
+  return t?JSON.parse(t):null;
+}
+function toast(m,ms){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.display='none',ms||2600)}
+function lsGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function lsSet(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}
+
+async function loadAll(){
+  const t=today();
+  const ms=t.slice(0,7)+'-01';
+  S.from=[ms,addDays(t,-13)].sort()[0];
+  const r=await Promise.all([
+    api('associates?select=*&order=name'),
+    api('daily_entries?select=*&entry_date=gte.'+S.from+'&order=entry_date'),
+    api('mtd_openings?select=*&month=gte.'+S.from.slice(0,7))
+  ]);
+  S.assocs=r[0];S.entries=r[1];S.openings=r[2];
+  if(S.me){const f=S.assocs.find(a=>a.id===S.me.id);if(f)S.me=f}
+}
+
+const counts=a=>a.reports===undefined||a.reports===null?!a.is_lead:!!a.reports;
+const reporters=()=>S.assocs.filter(a=>a.active&&counts(a));
+const admins=()=>S.assocs.filter(a=>a.active&&a.is_lead);
+const entryOf=(aid,d)=>S.entries.find(e=>e.associate_id===aid&&e.entry_date===d);
+const opening=(aid,m)=>{const o=S.openings.find(x=>x.associate_id===aid&&x.month===m);return o?+o.amount:0};
+function mtd(ids,upto){
+  const m=monthOf(upto);
+  return ids.reduce((s,id)=>s+opening(id,m)+S.entries.filter(e=>e.associate_id===id&&monthOf(e.entry_date)===m&&e.entry_date<=upto).reduce((x,e)=>x+(+e.revenue||0),0),0);
+}
+function series(ids,upto){
+  const out=[];
+  for(let i=6;i>=0;i--){
+    const d=addDays(upto,-i);
+    const v=ids.reduce((s,id)=>{const e=entryOf(id,d);return s+(e?+e.revenue:0)},0);
+    out.push({d:d,label:+d.slice(8,10),value:v});
+  }
+  return out;
+}
+function summary(ids,d){
+  const es=ids.map(id=>entryOf(id,d)).filter(Boolean);
+  const res={};
+  es.forEach(e=>Object.keys(e.reservations||{}).forEach(m=>{res[m]=(res[m]||0)+(+e.reservations[m]||0)}));
+  const m=monthOf(d),day=+d.slice(8,10),dim=daysInMonth(m);
+  const cur=mtd(ids,d);
+  const ser=series(ids,d);
+  return {date:d,leads:sum(es,'total_leads'),fresh:sum(es,'fresh_leads'),revenue:sum(es,'revenue'),res:res,filled:es.length,
+    mtd:cur,proj:cur/day*dim,day:day,dim:dim,series:ser,avg7:ser.reduce((s,x)=>s+x.value,0)/7};
+}
+
+/* ---------- card image ---------- */
+function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
+const FONT='system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif';
+function resText(res){
+  const k=Object.keys(res||{}).filter(x=>res[x]>0).sort();
+  return k.length?k.map(x=>monLabel(x)+': '+pad(res[x])).join('   '):'No reservations';
+}
+function drawCard(cv,d){
+  const W=1080,F=FONT;
+  const m=document.createElement('canvas').getContext('2d');
+  const keys=Object.keys(d.res).filter(k=>d.res[k]>0).sort();
+  m.font='600 34px '+F;
+  const chips=[];let cx=60,cy=0,rowsN=1;
+  keys.forEach(k=>{const s=monLabel(k)+': '+pad(d.res[k]);const w=m.measureText(s).width+56;if(cx+w>W-60){cx=60;cy+=84;rowsN++}chips.push({s:s,x:cx,y:cy,w:w});cx+=w+16});
+  const resH=keys.length?rowsN*84:60;
+  const yRes=775,y0=yRes+25;
+  let y=y0+resH+30;
+  const rows=d.rows||null,rowH=200;
+  const rowsPanelH=rows?(100+rows.length*rowH+10):0;
+  const yRows=y;if(rows)y+=rowsPanelH+30;
+  const yChart=y;y+=420+30;
+  const yProj=y;y+=190+40;
+  const H=y;
+  cv.width=W;cv.height=H;
+  const c=cv.getContext('2d');
+  const T=(s,x,yy,size,wt,col,al)=>{c.font=wt+' '+size+'px '+F;c.fillStyle=col;c.textAlign=al||'left';c.fillText(s,x,yy)};
+  c.fillStyle='#f3f5fb';c.fillRect(0,0,W,H);
+  const g=c.createLinearGradient(0,0,W,260);g.addColorStop(0,'#14215f');g.addColorStop(1,'#2a78d6');
+  c.fillStyle=g;c.fillRect(0,0,W,260);
+  T('Daily Sales Update',60,100,58,'700','#ffffff');
+  T(longDate(d.date),60,155,30,'400','rgba(255,255,255,0.88)');
+  T('ITC Hotels GCC  •  '+TEAM_NAME,60,212,26,'400','rgba(255,255,255,0.75)');
+  T(d.who,W-60,100,36,'600','#ffffff','right');
+  const tiles=[
+    [rows?'Team total leads':'Total leads received',String(d.leads),'#2a78d6'],
+    ['Fresh leads received & sent',String(d.fresh),'#1baf7a'],
+    [rows?"Team revenue today":"Today's revenue",'₹'+fmtINR(d.revenue),'#eb6834'],
+    [rows?'Team MTD':'MTD revenue',fmtLacs(d.mtd),'#6250d6']
+  ];
+  tiles.forEach((t,i)=>{
+    const x=60+(i%2)*500,yy=300+Math.floor(i/2)*220,w=460,h=190;
+    c.fillStyle='#ffffff';rr(c,x,yy,w,h,22);c.fill();
+    c.save();rr(c,x,yy,w,h,22);c.clip();c.fillStyle=t[2];c.fillRect(x,yy,14,h);c.restore();
+    T(t[0],x+44,yy+62,27,'400','#6b7280');
+    T(t[1],x+44,yy+143,66,'700','#111827');
+  });
+  T('Reservations by month',60,yRes,28,'400','#6b7280');
+  if(!keys.length){T('No reservations today',60,y0+45,34,'500','#14215f')}
+  else chips.forEach(ch=>{
+    c.fillStyle='#e3ecfb';rr(c,ch.x,y0+ch.y,ch.w,64,32);c.fill();
+    T(ch.s,ch.x+28,y0+ch.y+44,34,'600','#14215f');
+  });
+  if(rows){
+    c.fillStyle='#ffffff';rr(c,60,yRows,960,rowsPanelH,22);c.fill();
+    T('Associate wise',100,yRows+62,28,'400','#6b7280');
+    const cols=[100,330,560,790],labs=['Leads','Fresh','Revenue','MTD'];
+    rows.forEach((r,i)=>{
+      const top=yRows+95+i*rowH;
+      if(i>0){c.fillStyle='#e8ecf6';c.fillRect(100,top-14,880,2)}
+      T(r.name,100,top+40,36,'700','#111827');
+      if(!r.filled)T('Pending',980,top+40,30,'700','#b45309','right');
+      const vals=r.filled?[String(r.leads),String(r.fresh),'₹'+fmtINR(r.revenue),fmtLacs(r.mtd)]:['-','-','-',fmtLacs(r.mtd)];
+      labs.forEach((l,j)=>{
+        T(l,cols[j],top+92,22,'400','#6b7280');
+        T(vals[j],cols[j],top+132,34,'700',r.filled||j===3?'#111827':'#9aa3b5');
+      });
+      T(r.filled?resText(r.res):'No entry yet',100,top+174,26,'500',r.filled?'#14215f':'#9aa3b5');
+    });
+  }
+  c.fillStyle='#ffffff';rr(c,60,yChart,960,420,22);c.fill();
+  T(rows?'Team revenue, last 7 days (lacs)':'Last 7 days revenue (lacs)',100,yChart+58,28,'400','#6b7280');
+  const mx=Math.max.apply(null,d.series.map(s=>s.value).concat([1]));
+  const slot=880/7,bw=slot-26,base=yChart+350;
+  d.series.forEach((s,i)=>{
+    const h=Math.max(6,(s.value/mx)*200),x=100+i*slot+13,yy=base-h,last=i===6;
+    c.fillStyle=last?'#eb6834':'#9db8ea';
+    rr(c,x,yy,bw,h,8);c.fill();
+    T(String(lacs(s.value)),x+bw/2,yy-12,24,last?'700':'400',last?'#111827':'#6b7280','center');
+    T(String(s.label),x+bw/2,yChart+390,24,last?'700':'400',last?'#111827':'#6b7280','center');
+  });
+  c.fillStyle='#ffffff';rr(c,60,yProj,960,190,22);c.fill();
+  T('Projected month-end',100,yProj+60,30,'400','#6b7280');
+  T('≈ '+fmtLacs(d.proj),980,yProj+62,46,'700','#14215f','right');
+  c.fillStyle='#e0e8f8';rr(c,100,yProj+88,880,22,11);c.fill();
+  const frac=d.proj>0?Math.min(1,d.mtd/d.proj):0;
+  if(frac>0){c.fillStyle='#2a78d6';rr(c,100,yProj+88,Math.max(24,880*frac),22,11);c.fill()}
+  T('MTD '+fmtLacs(d.mtd)+'  (day '+d.day+' of '+d.dim+')',100,yProj+155,24,'400','#6b7280');
+  T('7-day avg '+lacs(d.avg7)+' lacs/day',980,yProj+155,24,'400','#6b7280','right');
+}
+
+/* ---------- text message ---------- */
+function resLines(res){
+  const k=Object.keys(res||{}).filter(x=>res[x]>0).sort();
+  return k.map(x=>pad(res[x])+' reservation'+(res[x]>1?'s':'')+' for '+monLabel(x)+' month');
+}
+function shortDate(d){return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}
+function buildText(d,who){
+  const L=[];
+  L.push('Good Evening All,');
+  L.push(d.rows?('Team update - '+TEAM_NAME+' ('+shortDate(d.date)+')'):('Update for '+shortDate(d.date)+' - '+who));
+  L.push('');
+  L.push('Total leads received - '+d.leads);
+  L.push('Fresh leads received and sent - '+d.fresh);
+  L.push("Today's revenue - "+fmtINR(d.revenue));
+  L.push('');
+  const rl=resLines(d.res);
+  if(rl.length)rl.forEach(x=>L.push(x));else L.push('No reservations today');
+  if(d.rows){
+    L.push('');L.push('Associate wise:');
+    d.rows.forEach((r,i)=>{
+      if(!r.filled){L.push((i+1)+') '+r.name+' - Pending');return}
+      L.push((i+1)+') '+r.name);
+      L.push('Leads '+r.leads+' | Fresh '+r.fresh+' | Revenue '+fmtINR(r.revenue)+' | MTD '+fmtLacs(r.mtd));
+      const x=resLines(r.res);L.push(x.length?x.join(', '):'No reservations');
+    });
+  }
+  L.push('');
+  L.push((d.rows?'Team MTD - ':'MTD - ')+fmtLacs(d.mtd));
+  L.push('Projected month-end - approx. '+fmtLacs(d.proj));
+  return L.join('\n');
+}
+
+/* ---------- sharing ---------- */
+function shareCard(fname){
+  return '<div class="card"><h2>Share on WhatsApp</h2><div class="grid3">'+
+    '<button onclick="doShare(\'img\')">Image</button>'+
+    '<button class="sec" onclick="doShare(\'txt\')">Text</button>'+
+    '<button class="sec" onclick="doShare(\'both\')">Both</button></div>'+
+    '<label>Message text (you can edit it before sharing)</label><textarea id="txt" rows="12"></textarea></div>';
+}
+function prepareShare(d,who,fname){
+  const cv=$('#cv');if(!cv)return;
+  d.who=who;drawCard(cv,d);
+  $('#txt').value=buildText(d,who);
+  S.share={fname:fname,blob:null};
+  cv.toBlob(b=>{if(S.share)S.share.blob=b},'image/png');
+}
+function saveBlob(b,name){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();a.remove()}
+async function copyText(t){try{await navigator.clipboard.writeText(t);return true}catch(e){return false}}
+async function doShare(mode){
+  const P=S.share,text=$('#txt').value;
+  if(!P||(mode!=='txt'&&!P.blob))return toast('Card is still preparing. Try again.');
+  if(mode==='txt'){
+    if(navigator.share){try{await navigator.share({text:text});return}catch(e){if(e&&e.name==='AbortError')return}}
+    const ok=await copyText(text);
+    return toast(ok?'Text copied. Paste it in WhatsApp.':'Could not share. Select the text and copy it.',4500);
+  }
+  const f=new File([P.blob],P.fname,{type:'image/png'});
+  const data=mode==='both'?{files:[f],text:text,title:'Daily sales update'}:{files:[f],title:'Daily sales update'};
+  if(navigator.canShare&&navigator.canShare(data)){
+    try{await navigator.share(data);return}catch(e){if(e&&e.name==='AbortError')return}
+  }
+  saveBlob(P.blob,P.fname);
+  if(mode==='both'){
+    const ok=await copyText(text);
+    toast(ok?'Image saved and text copied. Attach the image in WhatsApp and paste the text.':'Image saved. Copy the text below and send it too.',6000);
+  }else toast('Image saved. Attach it in the WhatsApp group.',5000);
+}
+
+/* ---------- login ---------- */
+function viewLogin(){
+  if(S.pending){
+    const a=S.pending,first=!a.pin;
+    return '<div class="wrap"><div class="card"><h2>'+esc(a.name)+'</h2>'+
+      (first?'<div class="note">First time here. Create a 4-digit PIN. You will use it to sign in.</div>':'')+
+      '<label>'+(first?'Create 4-digit PIN':'Enter your PIN')+'</label><input id="pin1" type="password" inputmode="numeric" maxlength="4" autocomplete="off">'+
+      (first?'<label>Confirm PIN</label><input id="pin2" type="password" inputmode="numeric" maxlength="4" autocomplete="off">':'')+
+      '<div id="perr"></div><div style="height:12px"></div><button onclick="doPin()">'+(first?'Save PIN and continue':'Sign in')+'</button>'+
+      '<div style="height:8px"></div><button class="sec" onclick="S.pending=null;render()">Back</button></div></div>';
+  }
+  const list=S.assocs.filter(a=>a.active);
+  return '<div class="wrap"><div class="card"><h2>Who are you?</h2><div class="names">'+
+    list.map(a=>'<button onclick="pickUser(\''+a.id+'\')">'+esc(a.name)+(a.is_lead?'  (Admin)':'')+'</button>').join('')+
+    '</div></div><div class="ver">'+VERSION+'</div></div>';
+}
+function pickUser(id){S.pending=S.assocs.find(a=>a.id===id);render()}
+async function doPin(){
+  const a=S.pending,p1=$('#pin1').value.trim(),first=!a.pin;
+  const err=m=>{$('#perr').innerHTML='<div class="err">'+m+'</div>'};
+  if(!/^\d{4}$/.test(p1))return err('PIN must be exactly 4 digits.');
+  if(first){
+    if(p1!==$('#pin2').value.trim())return err('The two PINs do not match.');
+    try{await api('associates?id=eq.'+a.id,{method:'PATCH',body:{pin:p1}});a.pin=p1}catch(e){return err('Could not save PIN: '+esc(e.message))}
+  }else if(p1!==a.pin)return err('Wrong PIN.');
+  S.me=a;S.pending=null;lsSet('gccAssoc',a.id);
+  S.tab=a.is_lead?'team':'entry';render();
+}
+function logout(){S.me=null;S.pending=null;lsSet('gccAssoc',null);render()}
+
+/* ---------- entry ---------- */
+function monthsList(extra){
+  const out=[];let m=today().slice(0,7);
+  for(let i=0;i<7;i++){out.push(m);m=nextMonth(m)}
+  (extra||[]).forEach(k=>{if(out.indexOf(k)<0)out.push(k)});
+  return out.sort();
+}
+function viewEntry(){
+  const lead=S.me.is_lead,rep=reporters();
+  const meCounts=counts(S.me);
+  const aid=lead?(S.entryAssoc||(meCounts?S.me.id:(rep[0]&&rep[0].id))):S.me.id;
+  if(!aid)return '<div class="wrap"><div class="card">No associates added yet. Add them in Admin.</div></div>';
+  S.entryAssoc=aid;
+  const d=S.date,t=today();
+  const allowed=lead||d===t||d===addDays(t,-1);
+  const e=entryOf(aid,d)||{};
+  const res=e.reservations||{};
+  const ml=monthsList(Object.keys(res));
+  let h='<div class="wrap"><div class="card"><h2>Daily entry</h2>';
+  if(lead)h+='<label>Associate</label><select onchange="S.entryAssoc=this.value;render()">'+rep.map(a=>'<option value="'+a.id+'"'+(a.id===aid?' selected':'')+'>'+esc(a.name)+'</option>').join('')+'</select>';
+  h+='<label>Date</label><input type="date" value="'+d+'" min="'+(lead?S.from:addDays(t,-1))+'" max="'+t+'" onchange="S.date=this.value||today();render()">';
+  if(!allowed)h+='<div class="note">Only the team lead can change older days.</div>';
+  if(e.id)h+='<div class="note">An entry already exists for this date. Saving will update it.</div>';
+  h+='<label>Total leads received</label><input id="f_leads" type="number" inputmode="numeric" min="0" value="'+(e.id?e.total_leads:'')+'">'+
+    '<label>Fresh leads received and sent</label><input id="f_fresh" type="number" inputmode="numeric" min="0" value="'+(e.id?e.fresh_leads:'')+'">'+
+    '<label>Today\'s revenue (₹)</label><input id="f_rev" type="number" inputmode="decimal" min="0" value="'+(e.id?e.revenue:'')+'">'+
+    '<label>Reservations (tick the month, then enter the count)</label>';
+  ml.forEach(m=>{
+    const on=res[m]>0;
+    h+='<div class="res"><input type="checkbox" id="r_'+m+'"'+(on?' checked':'')+' onchange="$(\'#c_'+m+'\').style.display=this.checked?\'block\':\'none\'"><span>'+monLabel(m)+' '+m.slice(0,4)+'</span><input type="number" inputmode="numeric" min="1" id="c_'+m+'" value="'+(on?res[m]:1)+'" style="display:'+(on?'block':'none')+'"></div>';
+  });
+  h+='<div id="eerr"></div><div style="height:14px"></div><button onclick="saveEntry()"'+(allowed?'':' disabled style="opacity:.5"')+'>Save entry</button>';
+  if(lead&&e.id)h+='<div style="height:10px"></div><button class="warn" onclick="delEntry(\''+e.id+'\')">Delete this entry</button>';
+  h+='</div></div>';
+  return h;
+}
+async function saveEntry(){
+  const err=m=>{$('#eerr').innerHTML='<div class="err">'+m+'</div>'};
+  const L=$('#f_leads').value,F=$('#f_fresh').value,R=$('#f_rev').value;
+  if(L===''||F===''||R==='')return err('Fill total leads, fresh leads and revenue. Enter 0 if none.');
+  if(+L<0||+F<0||+R<0)return err('Numbers cannot be negative.');
+  const res={};
+  document.querySelectorAll('[id^="r_"]').forEach(cb=>{
+    if(cb.checked){const m=cb.id.slice(2),c=parseInt($('#c_'+m).value,10);if(c>0)res[m]=c}
+  });
+  const body={associate_id:S.entryAssoc,entry_date:S.date,total_leads:parseInt(L,10),fresh_leads:parseInt(F,10),revenue:+R,reservations:res,updated_at:new Date().toISOString()};
+  try{
+    await api('daily_entries?on_conflict=associate_id,entry_date',{method:'POST',body:body,prefer:'resolution=merge-duplicates,return=minimal'});
+    await loadAll();toast('Saved');
+    S.viewDate=S.date;
+    if(!S.me.is_lead)S.tab='mine';
+    render();
+  }catch(e){err('Could not save: '+esc(e.message))}
+}
+
+/* ---------- cards ---------- */
+function dateBar(){
+  return '<div class="card"><label style="margin-top:0">Date</label><input type="date" value="'+S.viewDate+'" min="'+S.from+'" max="'+today()+'" onchange="S.viewDate=this.value||today();render()"></div>';
+}
+function viewMine(){
+  let h='<div class="wrap">'+dateBar();
+  if(!entryOf(S.me.id,S.viewDate))h+='<div class="note">No entry saved for this date yet. Go to the Entry tab to add it.</div>';
+  h+='<div class="card"><canvas id="cv"></canvas></div>'+shareCard()+'</div>';
+  setTimeout(()=>{prepareShare(summary([S.me.id],S.viewDate),S.me.name,'sales-update-'+S.viewDate+'.png')},0);
+  return h;
+}
+function teamSummary(){
+  const rep=reporters(),ids=rep.map(a=>a.id),d=S.viewDate,s=summary(ids,d);
+  s.rows=rep.map(a=>{const e=entryOf(a.id,d);return {name:a.name,filled:!!e,leads:e?+e.total_leads:0,fresh:e?+e.fresh_leads:0,revenue:e?+e.revenue:0,res:e?(e.reservations||{}):{},mtd:mtd([a.id],d)}});
+  return s;
+}
+function viewTeamCard(){
+  const s=teamSummary(),n=reporters().length;
+  let h='<div class="wrap">'+dateBar();
+  if(s.filled<n)h+='<div class="note">'+s.filled+' of '+n+' associates have filled this date. The others show as Pending.</div>';
+  h+='<div class="card"><canvas id="cv"></canvas></div>'+shareCard()+'</div>';
+  setTimeout(()=>{prepareShare(teamSummary(),'Team total','team-sales-update-'+S.viewDate+'.png')},0);
+  return h;
+}
+function viewTeam(){
+  const rep=reporters(),ids=rep.map(a=>a.id),d=S.viewDate,s=summary(ids,d);
+  let h='<div class="wrap">'+dateBar();
+  h+='<div class="card"><h2>Team: '+esc(longDate(d))+'</h2><div class="grid2">'+
+    '<div class="stat"><small>Total leads</small><b>'+s.leads+'</b></div>'+
+    '<div class="stat" style="border-color:#1baf7a"><small>Fresh leads sent</small><b>'+s.fresh+'</b></div>'+
+    '<div class="stat" style="border-color:#eb6834"><small>Day revenue</small><b>₹'+fmtINR(s.revenue)+'</b></div>'+
+    '<div class="stat" style="border-color:#6250d6"><small>Team MTD</small><b>'+fmtLacs(s.mtd)+'</b></div></div>'+
+    '<div style="margin-top:10px;font-size:14px;color:#6b7280">Projected month-end: <b style="color:#14215f">≈ '+fmtLacs(s.proj)+'</b></div></div>';
+  h+='<div class="card"><h2>By associate</h2><table><tr><th>Name</th><th>Leads</th><th>Revenue</th><th>MTD</th><th>Status</th></tr>';
+  rep.forEach(a=>{
+    const e=entryOf(a.id,d);
+    h+='<tr><td>'+esc(a.name)+'</td><td>'+(e?e.total_leads:'-')+'</td><td>'+(e?fmtINR(e.revenue):'-')+'</td><td>'+lacs(mtd([a.id],d))+'L</td><td class="'+(e?'ok':'pend')+'">'+(e?'Filled':'Pending')+'</td></tr>';
+  });
+  h+='</table></div>';
+  const mx=Math.max.apply(null,s.series.map(x=>x.value).concat([1]));
+  h+='<div class="card"><h2>Last 7 days (team revenue, lacs)</h2><div class="bars">'+
+    s.series.map((x,i)=>'<div class="'+(i===6?'t':'')+'">'+lacs(x.value)+'<i style="height:'+Math.max(4,x.value/mx*100)+'px"></i>'+x.label+'</div>').join('')+'</div></div></div>';
+  return h;
+}
+
+/* ---------- admin ---------- */
+function viewAdmin(){
+  const m=today().slice(0,7),rep=reporters();
+  let h='<div class="wrap"><div class="card"><h2>Associates and roles</h2>';
+  S.assocs.forEach(a=>{
+    h+='<div class="arow"><b>'+esc(a.name)+'</b>'+(a.is_lead?'<span class="badge">Admin</span>':'')+(counts(a)?'':'<span class="badge g">Not counted in team</span>')+(a.active?'':'<span class="badge g">Inactive</span>')+
+      '<div class="btns"><button class="sm sec" onclick="toggleAdmin(\''+a.id+'\')">'+(a.is_lead?'Remove admin':'Make admin')+'</button>'+
+      '<button class="sm sec" onclick="toggleCounts(\''+a.id+'\')">'+(counts(a)?'Exclude from team':'Count in team')+'</button>'+
+      '<button class="sm sec" onclick="toggleActive(\''+a.id+'\')">'+(a.active?'Deactivate':'Activate')+'</button>'+
+      '<button class="sm warn" onclick="resetPin(\''+a.id+'\')">Reset PIN</button></div></div>';
+  });
+  h+='<label>Add associate</label><div class="row"><input id="newname" placeholder="Full name"><button class="sm" style="white-space:nowrap" onclick="addAssoc()">Add</button></div></div>';
+  h+='<div class="card"><h2>MTD brought forward ('+monLabel(m)+' '+m.slice(0,4)+')</h2><div class="note">Revenue each associate already did this month before starting to use the app. The app adds the daily entries on top of this.</div>';
+  rep.forEach(a=>{
+    h+='<label>'+esc(a.name)+' (₹)</label><input id="op_'+a.id+'" type="number" inputmode="decimal" min="0" value="'+opening(a.id,m)+'">';
+  });
+  h+='<div style="height:12px"></div><button onclick="saveOpenings()">Save MTD brought forward</button></div>';
+  h+='<div class="card"><h2>Export</h2><button class="sec" onclick="exportCsv()">Download all entries (CSV)</button></div>';
+  h+='<div class="card" style="border:1px solid #f1b4b4"><h2 style="color:#a32d2d">Clear data</h2><div class="note">Deleted data cannot be brought back. Download the CSV first if you need a copy. Names and PINs are not touched.</div>'+
+    '<label>What to clear</label><select id="clr_mode" onchange="clrMode()"><option value="assoc">One associate (all entries and MTD brought forward)</option><option value="date">One date (all associates)</option><option value="all">Everything (all entries and MTD brought forward)</option></select>'+
+    '<div id="clr_assoc"><label>Associate</label><select id="clr_a">'+S.assocs.map(a=>'<option value="'+a.id+'">'+esc(a.name)+'</option>').join('')+'</select></div>'+
+    '<div id="clr_date" style="display:none"><label>Date</label><input type="date" id="clr_d" value="'+today()+'"></div>'+
+    '<label>Type DELETE to confirm</label><input id="clr_t" autocomplete="off" placeholder="DELETE"><div style="height:12px"></div>'+
+    '<button style="background:#c93a3a" onclick="doClear()">Clear data</button></div><div class="ver">'+VERSION+'</div></div>';
+  return h;
+}
+async function patchAssoc(id,body,okMsg){
+  try{await api('associates?id=eq.'+id,{method:'PATCH',body:body});await loadAll();toast(okMsg||'Updated');
+    if(!S.me.is_lead&&S.tab==='admin')S.tab='entry';
+    render();
+  }catch(e){toast('Error: '+e.message,6000)}
+}
+function toggleAdmin(id){
+  const a=S.assocs.find(x=>x.id===id);
+  if(a.is_lead){
+    if(admins().length<=1)return toast('At least one admin is needed.',4000);
+    if(!confirm(id===S.me.id?'Remove your own admin rights? You will lose access to Admin and Team card.':'Remove admin rights from '+a.name+'?'))return;
+    return patchAssoc(id,{is_lead:false},'Admin removed');
+  }
+  if(!confirm('Make '+a.name+' an admin? They can change roles, MTD, PINs and edit any day.'))return;
+  patchAssoc(id,{is_lead:true},'Admin added');
+}
+function toggleCounts(id){
+  const a=S.assocs.find(x=>x.id===id);
+  patchAssoc(id,{reports:!counts(a)},counts(a)?'Excluded from team numbers':'Now counted in team numbers');
+}
+function clrMode(){const m=$('#clr_mode').value;$('#clr_assoc').style.display=m==='assoc'?'block':'none';$('#clr_date').style.display=m==='date'?'block':'none'}
+function delErr(e){return /permission denied/i.test(e.message)?'Delete permission is not enabled in Supabase yet. Run the grant delete SQL first.':'Error: '+e.message}
+async function delRows(path){const r=await api(path,{method:'DELETE',prefer:'return=representation'});return Array.isArray(r)?r.length:0}
+async function doClear(){
+  const mode=$('#clr_mode').value;
+  if($('#clr_t').value.trim()!=='DELETE')return toast('Type DELETE in capital letters to confirm.',4000);
+  try{
+    let n=0;
+    if(mode==='assoc'){const id=$('#clr_a').value;n=await delRows('daily_entries?associate_id=eq.'+id);n+=await delRows('mtd_openings?associate_id=eq.'+id)}
+    else if(mode==='date'){const d=$('#clr_d').value;if(!d)return toast('Pick a date.');n=await delRows('daily_entries?entry_date=eq.'+d)}
+    else{n=await delRows('daily_entries?id=not.is.null');n+=await delRows('mtd_openings?associate_id=not.is.null')}
+    await loadAll();toast('Cleared '+n+' record'+(n===1?'':'s'),4000);render();
+  }catch(e){toast(delErr(e),7000)}
+}
+async function delEntry(id){
+  if(!confirm('Delete this entry? This cannot be undone.'))return;
+  try{await delRows('daily_entries?id=eq.'+id);await loadAll();toast('Entry deleted');render()}catch(e){toast(delErr(e),7000)}
+}
+async function toggleActive(id){const a=S.assocs.find(x=>x.id===id);try{await api('associates?id=eq.'+id,{method:'PATCH',body:{active:!a.active}});await loadAll();render()}catch(e){toast('Error: '+e.message,5000)}}
+async function resetPin(id){if(!confirm('Reset this PIN? They will create a new one at next sign-in.'))return;try{await api('associates?id=eq.'+id,{method:'PATCH',body:{pin:null}});await loadAll();toast('PIN reset');render()}catch(e){toast('Error: '+e.message,5000)}}
+async function addAssoc(){
+  const n=$('#newname').value.trim();if(!n)return toast('Enter a name');
+  try{await api('associates',{method:'POST',body:{name:n,team:'email'},prefer:'return=minimal'});await loadAll();toast('Added');render()}catch(e){toast('Error: '+e.message,5000)}
+}
+async function saveOpenings(){
+  const m=today().slice(0,7);
+  const rows=reporters().map(a=>({associate_id:a.id,month:m,amount:+($('#op_'+a.id).value||0)}));
+  try{await api('mtd_openings?on_conflict=associate_id,month',{method:'POST',body:rows,prefer:'resolution=merge-duplicates,return=minimal'});await loadAll();toast('Saved');render()}catch(e){toast('Error: '+e.message,5000)}
+}
+async function exportCsv(){
+  try{
+    const rows=await api('daily_entries?select=entry_date,total_leads,fresh_leads,revenue,reservations,associates(name,team)&order=entry_date');
+    const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+    let csv='Date,Team,Associate,Total leads,Fresh leads,Revenue,Reservations\n';
+    rows.forEach(r=>{
+      const rs=Object.keys(r.reservations||{}).sort().map(k=>k+':'+r.reservations[k]).join(' | ');
+      csv+=[r.entry_date,q(r.associates?r.associates.team:''),q(r.associates?r.associates.name:''),r.total_leads,r.fresh_leads,r.revenue,q(rs)].join(',')+'\n';
+    });
+    const b=new Blob([csv],{type:'text/csv'}),a=document.createElement('a');
+    a.href=URL.createObjectURL(b);a.download='sales-entries.csv';document.body.appendChild(a);a.click();a.remove();
+  }catch(e){toast('Error: '+e.message,5000)}
+}
+
+/* ---------- monthly reports ---------- */
+const prevMonth=m=>{let p=m.split('-').map(Number);p[1]--;if(p[1]===0){p[1]=12;p[0]--}return p[0]+'-'+pad(p[1])};
+function monthsBack(n){const out=[];let m=today().slice(0,7);for(let i=0;i<n;i++){out.push(m);m=prevMonth(m)}return out}
+async function fetchMonth(m){
+  const nx=nextMonth(m);
+  const r=await Promise.all([
+    api('daily_entries?select=*&entry_date=gte.'+m+'-01&entry_date=lt.'+nx+'-01&order=entry_date'),
+    api('mtd_openings?select=*&month=eq.'+m)
+  ]);
+  return {e:r[0],o:r[1]};
+}
+function mStats(m,data){
+  const ids=new Set(S.assocs.filter(counts).map(a=>a.id));
+  const es=data.e.filter(x=>ids.has(x.associate_id)),os=data.o.filter(x=>ids.has(x.associate_id));
+  const dim=daysInMonth(m),daily=new Array(dim).fill(0),res={};
+  let leads=0,fresh=0,rev=0;
+  es.forEach(e=>{
+    leads+=+e.total_leads;fresh+=+e.fresh_leads;rev+=+e.revenue;
+    daily[+e.entry_date.slice(8,10)-1]+=+e.revenue;
+    Object.keys(e.reservations||{}).forEach(k=>{res[k]=(res[k]||0)+(+e.reservations[k]||0)});
+  });
+  const open=os.reduce((t,x)=>t+(+x.amount),0);
+  const days=new Set(es.map(e=>e.entry_date)).size;
+  const per=S.assocs.filter(a=>counts(a)&&(a.active||es.some(e=>e.associate_id===a.id))).map(a=>{
+    const ae=es.filter(e=>e.associate_id===a.id),o=os.find(x=>x.associate_id===a.id);
+    return {name:a.name,days:new Set(ae.map(e=>e.entry_date)).size,leads:sum(ae,'total_leads'),fresh:sum(ae,'fresh_leads'),rev:sum(ae,'revenue')+(o?+o.amount:0)};
+  });
+  return {dim:dim,daily:daily,res:res,leads:leads,fresh:fresh,rev:rev,open:open,total:rev+open,days:days,per:per};
+}
+function reportHtml(m,cur,prev){
+  const a=mStats(m,cur),b=mStats(prevMonth(m),prev);
+  const isCur=m===today().slice(0,7),dayNow=+today().slice(8,10);
+  const proj=isCur?a.total/dayNow*a.dim:a.total;
+  let h='<div class="card"><h2>'+monLabel(m)+' '+m.slice(0,4)+(isCur?' (so far)':'')+'</h2><div class="grid2">'+
+    '<div class="stat"><small>Total leads</small><b>'+a.leads+'</b></div>'+
+    '<div class="stat" style="border-color:#1baf7a"><small>Fresh leads sent</small><b>'+a.fresh+'</b></div>'+
+    '<div class="stat" style="border-color:#6250d6"><small>Revenue</small><b>'+fmtLacs(a.total)+'</b></div>'+
+    '<div class="stat" style="border-color:#eb6834"><small>Days with entries</small><b>'+a.days+'</b></div></div>';
+  if(a.open>0)h+='<div class="note">Revenue includes '+fmtLacs(a.open)+' brought forward before the app was used.</div>';
+  h+='</div>';
+  h+='<div class="card"><h2>Compared with '+monLabel(prevMonth(m))+'</h2>';
+  if(b.total<=0)h+='<div class="note">No data for the previous month.</div>';
+  else{
+    const dl=(proj-b.total)/b.total*100;
+    h+='<table><tr><td>'+monLabel(prevMonth(m))+' total</td><td><b>'+fmtLacs(b.total)+'</b></td></tr>'+
+      '<tr><td>'+monLabel(m)+(isCur?' (projected month-end)':' total')+'</td><td><b>'+fmtLacs(proj)+'</b></td></tr></table>'+
+      '<div style="margin-top:10px;font-size:16px;font-weight:600;color:'+(dl>=0?'#0f7a54':'#a32d2d')+'">'+(dl>=0?'Up ':'Down ')+Math.abs(Math.round(dl*10)/10)+'% vs '+monLabel(prevMonth(m))+'</div>'+
+      (isCur?'<div style="font-size:12px;color:#6b7280;margin-top:4px">Projection = revenue so far divided by days passed, times days in the month.</div>':'');
+  }
+  h+='</div>';
+  const rk=Object.keys(a.res).filter(k=>a.res[k]>0).sort();
+  h+='<div class="card"><h2>Reservations by stay month</h2>'+(rk.length?rk.map(k=>'<span class="badge" style="font-size:14px;padding:6px 12px;margin:0 6px 6px 0">'+monLabel(k)+' '+k.slice(0,4)+': '+a.res[k]+'</span>').join(''):'<div style="color:#6b7280">None recorded.</div>')+'</div>';
+  h+='<div class="card"><h2>By associate</h2><table><tr><th>Name</th><th>Days</th><th>Leads</th><th>Fresh</th><th>Revenue</th></tr>'+
+    a.per.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+r.days+'</td><td>'+r.leads+'</td><td>'+r.fresh+'</td><td>'+lacs(r.rev)+'L</td></tr>').join('')+'</table></div>';
+  const mx=Math.max.apply(null,a.daily.concat([1]));
+  h+='<div class="card"><h2>Daily revenue (team)</h2><div class="bars" style="gap:2px;height:140px">'+
+    a.daily.map((v,i)=>{const d=i+1,t=isCur&&d===dayNow;return '<div class="'+(t?'t':'')+'" style="font-size:9px"><i style="height:'+(v>0?Math.max(3,v/mx*100):1)+'px"></i>'+((d===1||d%5===0)?d:'&nbsp;')+'</div>'}).join('')+'</div>'+
+    '<div style="font-size:12px;color:#6b7280;margin-top:6px">Tallest day: '+fmtLacs(mx>1?mx:0)+'</div></div>';
+  return h;
+}
+function viewReports(){
+  const sel=S.repMonth||today().slice(0,7);
+  setTimeout(loadReport,0);
+  return '<div class="wrap"><div class="card"><label style="margin-top:0">Month</label><select onchange="S.repMonth=this.value;loadReport()">'+
+    monthsBack(12).map(m=>'<option value="'+m+'"'+(m===sel?' selected':'')+'>'+monLabel(m)+' '+m.slice(0,4)+'</option>').join('')+'</select></div><div id="repbody"></div></div>';
+}
+async function loadReport(){
+  const box=$('#repbody');if(!box)return;
+  const m=S.repMonth||today().slice(0,7);
+  box.innerHTML='<div class="center">Loading…</div>';
+  try{
+    const r=await Promise.all([fetchMonth(m),fetchMonth(prevMonth(m))]);
+    if(S.tab!=='reports'||$('#repbody')!==box)return;
+    box.innerHTML=reportHtml(m,r[0],r[1]);
+  }catch(e){box.innerHTML='<div class="err">Could not load report: '+esc(e.message)+'</div>'}
+}
+
+/* ---------- shell ---------- */
+function render(){
+  const app=$('#app');
+  if(S.loadErr){app.innerHTML='<div class="wrap"><div class="err">Could not load data: '+esc(S.loadErr)+'</div><button onclick="boot()">Try again</button></div>';return}
+  if(!S.me){app.innerHTML='<div class="top"><h1>GCC Daily Sales Update</h1><div class="sub"><span>'+TEAM_NAME+'</span></div></div>'+viewLogin();return}
+  const lead=S.me.is_lead;
+  const tabs=lead?[['team','Team'],['teamcard','Team card'],['entry','Entry']].concat(counts(S.me)?[['mine','My card']]:[]).concat([['reports','Reports'],['admin','Admin']]):[['entry','Entry'],['mine','My card'],['team','Team'],['reports','Reports']];
+  let body='';
+  if(S.tab==='entry')body=viewEntry();
+  else if(S.tab==='mine')body=viewMine();
+  else if(S.tab==='team')body=viewTeam();
+  else if(S.tab==='teamcard')body=viewTeamCard();
+  else if(S.tab==='admin')body=viewAdmin();
+  else if(S.tab==='reports')body=viewReports();
+  app.innerHTML='<div class="top"><h1>GCC Daily Sales Update</h1><div class="sub"><span>'+esc(S.me.name)+' • '+TEAM_NAME+'</span><a onclick="logout()">Switch user</a></div></div>'+
+    '<div class="tabs">'+tabs.map(t=>'<div class="tab'+(S.tab===t[0]?' on':'')+'" onclick="S.tab=\''+t[0]+'\';render()">'+t[1]+'</div>').join('')+'</div>'+body;
+}
+async function boot(){
+  S.loadErr=null;
+  try{
+    await loadAll();
+    const id=lsGet('gccAssoc');
+    const a=id&&S.assocs.find(x=>x.id===id&&x.active);
+    if(a){S.me=a;S.tab=a.is_lead?'team':'entry'}
+  }catch(e){S.loadErr=e.message}
+  render();
+}
+boot();
+if('serviceWorker' in navigator){window.addEventListener('load',function(){try{navigator.serviceWorker.register('sw.js').catch(function(){})}catch(e){}})}
+</script>
+</body>
+</html>
