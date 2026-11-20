@@ -70,7 +70,7 @@ textarea{width:100%;font-size:15px;padding:10px;border:1px solid #cfd6e6;border-
 const SUPABASE_URL='https://pfioweulcnuaeumddals.supabase.co';
 const SUPABASE_KEY='sb_publishable_PsdVIkCf_BRD6Obk1eunNw_JTmyPdnk';
 const TEAM_NAME='Email team';
-const VERSION='v2 - 21 Nov 2026';
+const VERSION='v4 - 21 Nov 2026';
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -89,7 +89,7 @@ const fmtLacs=n=>lacs(n)+' lacs';
 const longDate=d=>new Date(d+'T00:00:00').toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
 const sum=(a,k)=>a.reduce((s,x)=>s+(+x[k]||0),0);
 
-let S={assocs:[],entries:[],openings:[],me:null,tab:'entry',date:today(),viewDate:today(),entryAssoc:null,from:today(),loadErr:null,pending:null,share:null};
+let S={assocs:[],entries:[],openings:[],me:null,tab:'entry',date:today(),viewDate:today(),entryAssoc:null,from:today(),loadErr:null,pending:null,share:null,repMonth:null};
 
 async function api(path,opt){
   opt=opt||{};
@@ -366,7 +366,9 @@ function viewEntry(){
     const on=res[m]>0;
     h+='<div class="res"><input type="checkbox" id="r_'+m+'"'+(on?' checked':'')+' onchange="$(\'#c_'+m+'\').style.display=this.checked?\'block\':\'none\'"><span>'+monLabel(m)+' '+m.slice(0,4)+'</span><input type="number" inputmode="numeric" min="1" id="c_'+m+'" value="'+(on?res[m]:1)+'" style="display:'+(on?'block':'none')+'"></div>';
   });
-  h+='<div id="eerr"></div><div style="height:14px"></div><button onclick="saveEntry()"'+(allowed?'':' disabled style="opacity:.5"')+'>Save entry</button></div></div>';
+  h+='<div id="eerr"></div><div style="height:14px"></div><button onclick="saveEntry()"'+(allowed?'':' disabled style="opacity:.5"')+'>Save entry</button>';
+  if(lead&&e.id)h+='<div style="height:10px"></div><button class="warn" onclick="delEntry(\''+e.id+'\')">Delete this entry</button>';
+  h+='</div></div>';
   return h;
 }
 async function saveEntry(){
@@ -450,7 +452,13 @@ function viewAdmin(){
     h+='<label>'+esc(a.name)+' (₹)</label><input id="op_'+a.id+'" type="number" inputmode="decimal" min="0" value="'+opening(a.id,m)+'">';
   });
   h+='<div style="height:12px"></div><button onclick="saveOpenings()">Save MTD brought forward</button></div>';
-  h+='<div class="card"><h2>Export</h2><button class="sec" onclick="exportCsv()">Download all entries (CSV)</button></div><div class="ver">'+VERSION+'</div></div>';
+  h+='<div class="card"><h2>Export</h2><button class="sec" onclick="exportCsv()">Download all entries (CSV)</button></div>';
+  h+='<div class="card" style="border:1px solid #f1b4b4"><h2 style="color:#a32d2d">Clear data</h2><div class="note">Deleted data cannot be brought back. Download the CSV first if you need a copy. Names and PINs are not touched.</div>'+
+    '<label>What to clear</label><select id="clr_mode" onchange="clrMode()"><option value="assoc">One associate (all entries and MTD brought forward)</option><option value="date">One date (all associates)</option><option value="all">Everything (all entries and MTD brought forward)</option></select>'+
+    '<div id="clr_assoc"><label>Associate</label><select id="clr_a">'+S.assocs.map(a=>'<option value="'+a.id+'">'+esc(a.name)+'</option>').join('')+'</select></div>'+
+    '<div id="clr_date" style="display:none"><label>Date</label><input type="date" id="clr_d" value="'+today()+'"></div>'+
+    '<label>Type DELETE to confirm</label><input id="clr_t" autocomplete="off" placeholder="DELETE"><div style="height:12px"></div>'+
+    '<button style="background:#c93a3a" onclick="doClear()">Clear data</button></div><div class="ver">'+VERSION+'</div></div>';
   return h;
 }
 async function patchAssoc(id,body,okMsg){
@@ -472,6 +480,24 @@ function toggleAdmin(id){
 function toggleCounts(id){
   const a=S.assocs.find(x=>x.id===id);
   patchAssoc(id,{reports:!counts(a)},counts(a)?'Excluded from team numbers':'Now counted in team numbers');
+}
+function clrMode(){const m=$('#clr_mode').value;$('#clr_assoc').style.display=m==='assoc'?'block':'none';$('#clr_date').style.display=m==='date'?'block':'none'}
+function delErr(e){return /permission denied/i.test(e.message)?'Delete permission is not enabled in Supabase yet. Run the grant delete SQL first.':'Error: '+e.message}
+async function delRows(path){const r=await api(path,{method:'DELETE',prefer:'return=representation'});return Array.isArray(r)?r.length:0}
+async function doClear(){
+  const mode=$('#clr_mode').value;
+  if($('#clr_t').value.trim()!=='DELETE')return toast('Type DELETE in capital letters to confirm.',4000);
+  try{
+    let n=0;
+    if(mode==='assoc'){const id=$('#clr_a').value;n=await delRows('daily_entries?associate_id=eq.'+id);n+=await delRows('mtd_openings?associate_id=eq.'+id)}
+    else if(mode==='date'){const d=$('#clr_d').value;if(!d)return toast('Pick a date.');n=await delRows('daily_entries?entry_date=eq.'+d)}
+    else{n=await delRows('daily_entries?id=not.is.null');n+=await delRows('mtd_openings?associate_id=not.is.null')}
+    await loadAll();toast('Cleared '+n+' record'+(n===1?'':'s'),4000);render();
+  }catch(e){toast(delErr(e),7000)}
+}
+async function delEntry(id){
+  if(!confirm('Delete this entry? This cannot be undone.'))return;
+  try{await delRows('daily_entries?id=eq.'+id);await loadAll();toast('Entry deleted');render()}catch(e){toast(delErr(e),7000)}
 }
 async function toggleActive(id){const a=S.assocs.find(x=>x.id===id);try{await api('associates?id=eq.'+id,{method:'PATCH',body:{active:!a.active}});await loadAll();render()}catch(e){toast('Error: '+e.message,5000)}}
 async function resetPin(id){if(!confirm('Reset this PIN? They will create a new one at next sign-in.'))return;try{await api('associates?id=eq.'+id,{method:'PATCH',body:{pin:null}});await loadAll();toast('PIN reset');render()}catch(e){toast('Error: '+e.message,5000)}}
@@ -498,19 +524,97 @@ async function exportCsv(){
   }catch(e){toast('Error: '+e.message,5000)}
 }
 
+/* ---------- monthly reports ---------- */
+const prevMonth=m=>{let p=m.split('-').map(Number);p[1]--;if(p[1]===0){p[1]=12;p[0]--}return p[0]+'-'+pad(p[1])};
+function monthsBack(n){const out=[];let m=today().slice(0,7);for(let i=0;i<n;i++){out.push(m);m=prevMonth(m)}return out}
+async function fetchMonth(m){
+  const nx=nextMonth(m);
+  const r=await Promise.all([
+    api('daily_entries?select=*&entry_date=gte.'+m+'-01&entry_date=lt.'+nx+'-01&order=entry_date'),
+    api('mtd_openings?select=*&month=eq.'+m)
+  ]);
+  return {e:r[0],o:r[1]};
+}
+function mStats(m,data){
+  const ids=new Set(S.assocs.filter(counts).map(a=>a.id));
+  const es=data.e.filter(x=>ids.has(x.associate_id)),os=data.o.filter(x=>ids.has(x.associate_id));
+  const dim=daysInMonth(m),daily=new Array(dim).fill(0),res={};
+  let leads=0,fresh=0,rev=0;
+  es.forEach(e=>{
+    leads+=+e.total_leads;fresh+=+e.fresh_leads;rev+=+e.revenue;
+    daily[+e.entry_date.slice(8,10)-1]+=+e.revenue;
+    Object.keys(e.reservations||{}).forEach(k=>{res[k]=(res[k]||0)+(+e.reservations[k]||0)});
+  });
+  const open=os.reduce((t,x)=>t+(+x.amount),0);
+  const days=new Set(es.map(e=>e.entry_date)).size;
+  const per=S.assocs.filter(a=>counts(a)&&(a.active||es.some(e=>e.associate_id===a.id))).map(a=>{
+    const ae=es.filter(e=>e.associate_id===a.id),o=os.find(x=>x.associate_id===a.id);
+    return {name:a.name,days:new Set(ae.map(e=>e.entry_date)).size,leads:sum(ae,'total_leads'),fresh:sum(ae,'fresh_leads'),rev:sum(ae,'revenue')+(o?+o.amount:0)};
+  });
+  return {dim:dim,daily:daily,res:res,leads:leads,fresh:fresh,rev:rev,open:open,total:rev+open,days:days,per:per};
+}
+function reportHtml(m,cur,prev){
+  const a=mStats(m,cur),b=mStats(prevMonth(m),prev);
+  const isCur=m===today().slice(0,7),dayNow=+today().slice(8,10);
+  const proj=isCur?a.total/dayNow*a.dim:a.total;
+  let h='<div class="card"><h2>'+monLabel(m)+' '+m.slice(0,4)+(isCur?' (so far)':'')+'</h2><div class="grid2">'+
+    '<div class="stat"><small>Total leads</small><b>'+a.leads+'</b></div>'+
+    '<div class="stat" style="border-color:#1baf7a"><small>Fresh leads sent</small><b>'+a.fresh+'</b></div>'+
+    '<div class="stat" style="border-color:#6250d6"><small>Revenue</small><b>'+fmtLacs(a.total)+'</b></div>'+
+    '<div class="stat" style="border-color:#eb6834"><small>Days with entries</small><b>'+a.days+'</b></div></div>';
+  if(a.open>0)h+='<div class="note">Revenue includes '+fmtLacs(a.open)+' brought forward before the app was used.</div>';
+  h+='</div>';
+  h+='<div class="card"><h2>Compared with '+monLabel(prevMonth(m))+'</h2>';
+  if(b.total<=0)h+='<div class="note">No data for the previous month.</div>';
+  else{
+    const dl=(proj-b.total)/b.total*100;
+    h+='<table><tr><td>'+monLabel(prevMonth(m))+' total</td><td><b>'+fmtLacs(b.total)+'</b></td></tr>'+
+      '<tr><td>'+monLabel(m)+(isCur?' (projected month-end)':' total')+'</td><td><b>'+fmtLacs(proj)+'</b></td></tr></table>'+
+      '<div style="margin-top:10px;font-size:16px;font-weight:600;color:'+(dl>=0?'#0f7a54':'#a32d2d')+'">'+(dl>=0?'Up ':'Down ')+Math.abs(Math.round(dl*10)/10)+'% vs '+monLabel(prevMonth(m))+'</div>'+
+      (isCur?'<div style="font-size:12px;color:#6b7280;margin-top:4px">Projection = revenue so far divided by days passed, times days in the month.</div>':'');
+  }
+  h+='</div>';
+  const rk=Object.keys(a.res).filter(k=>a.res[k]>0).sort();
+  h+='<div class="card"><h2>Reservations by stay month</h2>'+(rk.length?rk.map(k=>'<span class="badge" style="font-size:14px;padding:6px 12px;margin:0 6px 6px 0">'+monLabel(k)+' '+k.slice(0,4)+': '+a.res[k]+'</span>').join(''):'<div style="color:#6b7280">None recorded.</div>')+'</div>';
+  h+='<div class="card"><h2>By associate</h2><table><tr><th>Name</th><th>Days</th><th>Leads</th><th>Fresh</th><th>Revenue</th></tr>'+
+    a.per.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+r.days+'</td><td>'+r.leads+'</td><td>'+r.fresh+'</td><td>'+lacs(r.rev)+'L</td></tr>').join('')+'</table></div>';
+  const mx=Math.max.apply(null,a.daily.concat([1]));
+  h+='<div class="card"><h2>Daily revenue (team)</h2><div class="bars" style="gap:2px;height:140px">'+
+    a.daily.map((v,i)=>{const d=i+1,t=isCur&&d===dayNow;return '<div class="'+(t?'t':'')+'" style="font-size:9px"><i style="height:'+(v>0?Math.max(3,v/mx*100):1)+'px"></i>'+((d===1||d%5===0)?d:'&nbsp;')+'</div>'}).join('')+'</div>'+
+    '<div style="font-size:12px;color:#6b7280;margin-top:6px">Tallest day: '+fmtLacs(mx>1?mx:0)+'</div></div>';
+  return h;
+}
+function viewReports(){
+  const sel=S.repMonth||today().slice(0,7);
+  setTimeout(loadReport,0);
+  return '<div class="wrap"><div class="card"><label style="margin-top:0">Month</label><select onchange="S.repMonth=this.value;loadReport()">'+
+    monthsBack(12).map(m=>'<option value="'+m+'"'+(m===sel?' selected':'')+'>'+monLabel(m)+' '+m.slice(0,4)+'</option>').join('')+'</select></div><div id="repbody"></div></div>';
+}
+async function loadReport(){
+  const box=$('#repbody');if(!box)return;
+  const m=S.repMonth||today().slice(0,7);
+  box.innerHTML='<div class="center">Loading…</div>';
+  try{
+    const r=await Promise.all([fetchMonth(m),fetchMonth(prevMonth(m))]);
+    if(S.tab!=='reports'||$('#repbody')!==box)return;
+    box.innerHTML=reportHtml(m,r[0],r[1]);
+  }catch(e){box.innerHTML='<div class="err">Could not load report: '+esc(e.message)+'</div>'}
+}
+
 /* ---------- shell ---------- */
 function render(){
   const app=$('#app');
   if(S.loadErr){app.innerHTML='<div class="wrap"><div class="err">Could not load data: '+esc(S.loadErr)+'</div><button onclick="boot()">Try again</button></div>';return}
   if(!S.me){app.innerHTML='<div class="top"><h1>GCC Daily Sales Update</h1><div class="sub"><span>'+TEAM_NAME+'</span></div></div>'+viewLogin();return}
   const lead=S.me.is_lead;
-  const tabs=lead?[['team','Team'],['teamcard','Team card'],['entry','Entry']].concat(counts(S.me)?[['mine','My card']]:[]).concat([['admin','Admin']]):[['entry','Entry'],['mine','My card'],['team','Team']];
+  const tabs=lead?[['team','Team'],['teamcard','Team card'],['entry','Entry']].concat(counts(S.me)?[['mine','My card']]:[]).concat([['reports','Reports'],['admin','Admin']]):[['entry','Entry'],['mine','My card'],['team','Team'],['reports','Reports']];
   let body='';
   if(S.tab==='entry')body=viewEntry();
   else if(S.tab==='mine')body=viewMine();
   else if(S.tab==='team')body=viewTeam();
   else if(S.tab==='teamcard')body=viewTeamCard();
   else if(S.tab==='admin')body=viewAdmin();
+  else if(S.tab==='reports')body=viewReports();
   app.innerHTML='<div class="top"><h1>GCC Daily Sales Update</h1><div class="sub"><span>'+esc(S.me.name)+' • '+TEAM_NAME+'</span><a onclick="logout()">Switch user</a></div></div>'+
     '<div class="tabs">'+tabs.map(t=>'<div class="tab'+(S.tab===t[0]?' on':'')+'" onclick="S.tab=\''+t[0]+'\';render()">'+t[1]+'</div>').join('')+'</div>'+body;
 }
