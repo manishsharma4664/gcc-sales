@@ -70,7 +70,7 @@ textarea{width:100%;font-size:15px;padding:10px;border:1px solid #cfd6e6;border-
 const SUPABASE_URL='https://pfioweulcnuaeumddals.supabase.co';
 const SUPABASE_KEY='sb_publishable_PsdVIkCf_BRD6Obk1eunNw_JTmyPdnk';
 const TEAM_NAME='Email team';
-const VERSION='v6 - 28 Nov 2026';
+const VERSION='v7 - 28 Nov 2026';
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -453,6 +453,7 @@ function viewAdmin(){
   });
   h+='<div style="height:12px"></div><button onclick="saveOpenings()">Save MTD brought forward</button></div>';
   h+='<div class="card"><h2>Export</h2><label style="margin-top:0">Report period</label><select id="xl_month"><option value="'+today().slice(0,7)+'">'+monLabel(today().slice(0,7))+' '+today().slice(0,4)+' (this month)</option>'+monthsBack(12).slice(1).map(m=>'<option value="'+m+'">'+monLabel(m)+' '+m.slice(0,4)+'</option>').join('')+'<option value="all">All data (since start)</option></select><div style="height:8px"></div><button onclick="exportXlsx()">Download Excel report (.xlsx)</button><div style="height:8px"></div><button class="sec" onclick="exportCsv()">Raw backup (CSV)</button></div>';
+  h+='<div class="card"><h2>Email to boss (Outlook)</h2><label style="margin-top:0">To</label><input id="ml_to" type="text" placeholder="boss@company.com" value="'+esc(lsGet('gccMailTo')||'')+'"><label>CC</label><input id="ml_cc" type="text" placeholder="name1@company.com; name2@company.com" value="'+esc(lsGet('gccMailCc')||'')+'"><label>Update for date</label><input id="ml_date" type="date" value="'+today()+'" max="'+today()+'" min="'+S.from+'"><div class="note">Opens in Outlook as a ready draft with the month Excel attached. Check it and press Send. To and CC are remembered on this device.</div><div style="height:8px"></div><button onclick="makeEml()">Create email draft (.eml)</button></div>';
   h+='<div class="card" style="border:1px solid #f1b4b4"><h2 style="color:#a32d2d">Clear data</h2><div class="note">Deleted data cannot be brought back. Download the CSV first if you need a copy. Names and PINs are not touched.</div>'+
     '<label>What to clear</label><select id="clr_mode" onchange="clrMode()"><option value="assoc">One associate (all entries and MTD brought forward)</option><option value="date">One date (all associates)</option><option value="all">Everything (all entries and MTD brought forward)</option></select>'+
     '<div id="clr_assoc"><label>Associate</label><select id="clr_a">'+S.assocs.map(a=>'<option value="'+a.id+'">'+esc(a.name)+'</option>').join('')+'</select></div>'+
@@ -596,6 +597,13 @@ async function exportXlsx(){
   const sel=$('#xl_month')?$('#xl_month').value:today().slice(0,7);
   toast('Preparing report…',8000);
   try{
+    const x=await buildXlsx(sel),a=document.createElement('a');
+    a.href=URL.createObjectURL(x.blob);a.download=x.name;
+    document.body.appendChild(a);a.click();a.remove();toast('Report downloaded ('+x.label+')');
+  }catch(e){toast('Error: '+e.message,6000)}
+}
+async function buildXlsx(sel){
+  {
     let q='daily_entries?select=*&order=entry_date,id',qo='mtd_openings?select=*&order=month,associate_id';
     if(sel!=='all'){q+='&entry_date=gte.'+sel+'-01&entry_date=lt.'+nextMonth(sel)+'-01';qo+='&month=eq.'+sel}
     const r=await Promise.all([fetchAll(q),fetchAll(qo)]);
@@ -671,9 +679,59 @@ async function exportXlsx(){
       {name:'Month Summary',rows:s3,widths:[14,24,10,12,13,18,16,16,13,16].concat(wr),opt:{filter:'A1:'+XL.col(9+wr.length)+s3.length}},
       {name:'Raw Data',rows:s4,widths:[14,24,14,12,13,15,40],opt:{}}
     ];
-    const blob=XL.book(sheets),a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);a.download='GCC-sales-'+TEAM_NAME.replace(/\s+/g,'-')+'-'+(sel==='all'?'all-data':sel)+'.xlsx';
-    document.body.appendChild(a);a.click();a.remove();toast('Report downloaded ('+label+')');
+    return {blob:XL.book(sheets),label:label,name:'GCC-sales-'+TEAM_NAME.replace(/\s+/g,'-')+'-'+(sel==='all'?'all-data':sel)+'.xlsx'};
+  }
+}
+
+/* ---------- email draft (.eml) for Outlook ---------- */
+const dLabel=d=>(+d.slice(8,10))+' '+monLabel(d.slice(0,7))+' '+d.slice(0,4);
+function mailHtml(d,who){
+  const ids=reporters().map(a=>a.id),sm=summary(ids,d);
+  const R=n=>'&#8377;'+fmtINR(n);
+  const tile=(lab,val,col)=>'<td width="25%" style="padding:3px"><table width="100%" cellpadding="0" cellspacing="0" style="background:'+col+'"><tr><td align="center" style="padding:12px 4px;font-family:Calibri,Arial,sans-serif"><div style="font-size:12px;color:#ffffff">'+lab+'</div><div style="font-size:22px;font-weight:bold;color:#ffffff">'+val+'</div></td></tr></table></td>';
+  const th=(t,al)=>'<td align="'+(al||'right')+'" style="background:#14215f;color:#ffffff;font-weight:bold;padding:7px 8px;font-size:13px">'+t+'</td>';
+  const td=(t,al,b,bg)=>'<td align="'+(al||'right')+'" style="padding:7px 8px;font-size:14px;border-bottom:1px solid #d9deee;'+(b?'font-weight:bold;':'')+(bg?'background:'+bg+';':'')+'">'+t+'</td>';
+  let rows='';
+  reporters().forEach(a=>{
+    const e=entryOf(a.id,d),m=mtd([a.id],d);
+    rows+='<tr>'+td(esc(a.name),'left')+(e?td(e.total_leads)+td(e.fresh_leads)+td(R(e.revenue)):td('-')+td('-')+td('-'))+td(fmtLacs(m))+'</tr>';
+  });
+  rows+='<tr>'+td('Team total','left',1,'#e8ecf8')+td(sm.leads,'right',1,'#e8ecf8')+td(sm.fresh,'right',1,'#e8ecf8')+td(R(sm.revenue),'right',1,'#e8ecf8')+td(fmtLacs(sm.mtd),'right',1,'#e8ecf8')+'</tr>';
+  const rk=Object.keys(sm.res).filter(k=>sm.res[k]>0).sort();
+  const resH=rk.length?rk.map(k=>'<span style="background:#eef0fb;color:#14215f;padding:4px 10px;font-weight:bold">'+monLabel(k)+' '+k.slice(0,4)+': '+sm.res[k]+'</span>&nbsp; ').join(''):'<span style="color:#6b7280">No reservations today</span>';
+  const mx=Math.max.apply(null,sm.series.map(x=>x.value).concat([1]));
+  const trend=sm.series.slice().reverse().map(x=>'<tr><td style="padding:4px 8px;font-size:13px;color:#374151" width="70">'+dLabel(x.d).slice(0,-5)+'</td><td style="padding:4px 8px;font-size:13px" width="90" align="right">'+R(x.value)+'</td><td style="padding:4px 8px"><table cellpadding="0" cellspacing="0"><tr><td width="'+Math.max(2,Math.round(x.value/mx*200))+'" height="10" style="background:'+(x.d===d?'#eb6834':'#6250d6')+';font-size:1px;line-height:1px">&nbsp;</td></tr></table></td></tr>').join('');
+  return '<html><body style="margin:0;background:#f3f5fb"><table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f5fb"><tr><td align="center" style="padding:14px 6px">'+
+  '<table width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;font-family:Calibri,Arial,sans-serif;color:#111827">'+
+  '<tr><td style="background:#14215f;padding:18px 20px"><div style="font-size:12px;color:#aab6e8;letter-spacing:1px">'+esc(TEAM_NAME.toUpperCase())+' &middot; DAILY SALES UPDATE</div><div style="font-size:24px;font-weight:bold;color:#ffffff">'+dLabel(d)+'</div></td></tr>'+
+  '<tr><td style="padding:16px 20px 6px;font-size:14px">Good Evening,<br><br>Please find the sales update for today below. The month-to-date Excel report is attached.</td></tr>'+
+  '<tr><td style="padding:6px 17px"><table width="100%" cellpadding="0" cellspacing="0"><tr>'+tile('Total leads',sm.leads,'#2f5bd6')+tile('Fresh leads sent',sm.fresh,'#1baf7a')+tile("Today's revenue",R(sm.revenue),'#6250d6')+tile('MTD',fmtLacs(sm.mtd),'#eb6834')+'</tr></table></td></tr>'+
+  '<tr><td style="padding:12px 20px 4px;font-size:16px;font-weight:bold;color:#14215f">Associate-wise today</td></tr>'+
+  '<tr><td style="padding:0 20px"><table width="100%" cellpadding="0" cellspacing="0"><tr>'+th('Associate','left')+th('Leads')+th('Fresh')+th('Revenue')+th('MTD')+'</tr>'+rows+'</table></td></tr>'+
+  '<tr><td style="padding:14px 20px 4px;font-size:16px;font-weight:bold;color:#14215f">Reservations by stay month (today)</td></tr><tr><td style="padding:2px 20px;font-size:14px">'+resH+'</td></tr>'+
+  '<tr><td style="padding:14px 20px 4px;font-size:16px;font-weight:bold;color:#14215f">Last 7 days (team revenue)</td></tr><tr><td style="padding:0 20px"><table cellpadding="0" cellspacing="0">'+trend+'</table></td></tr>'+
+  '<tr><td style="padding:18px 20px 20px;font-size:14px">Regards,<br><b>'+esc(who)+'</b></td></tr></table></td></tr></table></body></html>';
+}
+function b64(bytes){let s='';for(let i=0;i<bytes.length;i+=8192)s+=String.fromCharCode.apply(null,bytes.subarray(i,i+8192));return btoa(s).replace(/(.{76})/g,'$1\r\n')}
+function mailAddrs(v){return String(v||'').split(/[;,\s]+/).filter(Boolean).join(', ')}
+async function makeEml(){
+  try{
+    const d=($('#ml_date')&&$('#ml_date').value)||today();
+    const to=mailAddrs($('#ml_to').value),cc=mailAddrs($('#ml_cc').value);
+    lsSet('gccMailTo',$('#ml_to').value);lsSet('gccMailCc',$('#ml_cc').value);
+    if(d<S.from)return toast('Pick a date from '+dLabel(S.from)+' onwards',5000);
+    toast('Preparing email…',8000);
+    const x=await buildXlsx(monthOf(d));
+    const bytes=new Uint8Array(await x.blob.arrayBuffer());
+    const html=new TextEncoder().encode(mailHtml(d,S.me.name));
+    const B='=_gcc_'+Date.now();
+    const eml=['X-Unsent: 1','To: '+to,'Cc: '+cc,'Subject: '+TEAM_NAME+' Sales Update - '+dLabel(d),'MIME-Version: 1.0','Content-Type: multipart/mixed; boundary="'+B+'"','',
+      '--'+B,'Content-Type: text/html; charset=utf-8','Content-Transfer-Encoding: base64','',b64(html),
+      '--'+B,'Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; name="'+x.name+'"','Content-Transfer-Encoding: base64','Content-Disposition: attachment; filename="'+x.name+'"','',b64(bytes),
+      '--'+B+'--',''].join('\r\n');
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([eml],{type:'message/rfc822'}));a.download='Sales-Update-'+d+'.eml';
+    document.body.appendChild(a);a.click();a.remove();toast('Draft downloaded - open it, then press Send');
   }catch(e){toast('Error: '+e.message,6000)}
 }
 
