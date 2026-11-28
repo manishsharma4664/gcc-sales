@@ -70,7 +70,7 @@ textarea{width:100%;font-size:15px;padding:10px;border:1px solid #cfd6e6;border-
 const SUPABASE_URL='https://pfioweulcnuaeumddals.supabase.co';
 const SUPABASE_KEY='sb_publishable_PsdVIkCf_BRD6Obk1eunNw_JTmyPdnk';
 const TEAM_NAME='Email team';
-const VERSION='v7 - 28 Nov 2026';
+const VERSION='v8 - 28 Nov 2026';
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -613,8 +613,8 @@ async function buildXlsx(sel){
     const resKeys=res=>Object.keys(res||{}).filter(k=>+res[k]>0).sort();
     const resTxt=res=>resKeys(res).map(k=>monLabel(k)+' '+k.slice(0,4)+': '+res[k]).join('  |  ')||'-';
     const resTot=res=>resKeys(res).reduce((t,k)=>t+(+res[k]),0);
-    const resCells=res=>[TX(resTxt(res)),IN(resTot(res))];
-    const resHdr=[H('Reservations by stay month'),H('Total reservations')];
+    const resCells=res=>[IN(resTot(res)),TX(resTxt(res))];
+    const resHdr=[H('Total reservations'),H('Reservations by stay month')];
     const months=Array.from(new Set(TE.map(e=>e.entry_date.slice(0,7)).concat(O.filter(o=>team.has(o.associate_id)).map(o=>o.month)))).sort();
     const T0=today(),nowM=T0.slice(0,7);
     const op=(aid,m)=>{const o=O.find(x=>x.associate_id===aid&&x.month===m);return o?+o.amount:0};
@@ -662,7 +662,7 @@ async function buildXlsx(sel){
         s3.push({c:[TX(monLabel(m)+' '+m.slice(0,4)),TX(a.name),IN(new Set(es.map(e=>e.entry_date)).size),IN(sum(es,'total_leads')),IN(sum(es,'fresh_leads')),RP(rev),RP(bf),RP(tt),LC(tt),RP(es.length?rev/new Set(es.map(e=>e.entry_date)).size:0),].concat(resCells(res))});
       });
       const tt=T.rev+T.bf;tot[m]=tt;
-      s3.push({c:[{v:monLabel(m)+' '+m.slice(0,4),s:8},{v:'TEAM TOTAL',s:8},{v:T.days.size,s:9},{v:T.leads,s:9},{v:T.fresh,s:9},{v:Math.round(T.rev),s:10},{v:Math.round(T.bf),s:10},{v:Math.round(tt),s:10},{v:Math.round(tt/1000)/100,s:11},{v:'',s:8},{v:resTxt(T.res),s:8},{v:resTot(T.res),s:9}]});
+      s3.push({c:[{v:monLabel(m)+' '+m.slice(0,4),s:8},{v:'TEAM TOTAL',s:8},{v:T.days.size,s:9},{v:T.leads,s:9},{v:T.fresh,s:9},{v:Math.round(T.rev),s:10},{v:Math.round(T.bf),s:10},{v:Math.round(tt),s:10},{v:Math.round(tt/1000)/100,s:11},{v:'',s:8},{v:resTot(T.res),s:9},{v:resTxt(T.res),s:8}]});
     });
     /* Sheet 4: Raw data */
     const s4=[{c:[H('Date'),H('Associate'),H('Counted in team total'),H('Total leads'),H('Fresh leads sent'),H('Revenue (₹)'),H('Reservations (stay month: count)')],h:34}];
@@ -672,7 +672,7 @@ async function buildXlsx(sel){
     });
     s4.push({c:[]});s4.push({c:[{v:'Brought forward before the app was used',s:8}]});
     O.forEach(o=>s4.push({c:[TX(monLabel(o.month)+' '+o.month.slice(0,4)),TX((by[o.associate_id]||{}).name||'?'),TX(team.has(o.associate_id)?'Yes':'No'),{v:'',s:2},{v:'',s:2},RP(o.amount)]}));
-    const wr=[44,14];
+    const wr=[14,44];
     const sheets=[
       {name:'Team Daily',rows:s1,widths:[14,13,7,12,13,15,16,13].concat(wr),opt:{filter:'A1:'+XL.col(7+wr.length)+s1.length}},
       {name:'Associate Daily',rows:s2,widths:[14,13,24,12,13,15,16,14].concat(wr),opt:{filter:'A1:'+XL.col(7+wr.length)+s2.length}},
