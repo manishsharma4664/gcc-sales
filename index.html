@@ -70,7 +70,7 @@ textarea{width:100%;font-size:15px;padding:10px;border:1px solid #cfd6e6;border-
 const SUPABASE_URL='https://pfioweulcnuaeumddals.supabase.co';
 const SUPABASE_KEY='sb_publishable_PsdVIkCf_BRD6Obk1eunNw_JTmyPdnk';
 const TEAM_NAME='Email team';
-const VERSION='v5 - 28 Nov 2026';
+const VERSION='v6 - 28 Nov 2026';
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -452,7 +452,7 @@ function viewAdmin(){
     h+='<label>'+esc(a.name)+' (₹)</label><input id="op_'+a.id+'" type="number" inputmode="decimal" min="0" value="'+opening(a.id,m)+'">';
   });
   h+='<div style="height:12px"></div><button onclick="saveOpenings()">Save MTD brought forward</button></div>';
-  h+='<div class="card"><h2>Export</h2><button class="sec" onclick="exportCsv()">Download all entries (CSV)</button></div>';
+  h+='<div class="card"><h2>Export</h2><label style="margin-top:0">Report period</label><select id="xl_month"><option value="'+today().slice(0,7)+'">'+monLabel(today().slice(0,7))+' '+today().slice(0,4)+' (this month)</option>'+monthsBack(12).slice(1).map(m=>'<option value="'+m+'">'+monLabel(m)+' '+m.slice(0,4)+'</option>').join('')+'<option value="all">All data (since start)</option></select><div style="height:8px"></div><button onclick="exportXlsx()">Download Excel report (.xlsx)</button><div style="height:8px"></div><button class="sec" onclick="exportCsv()">Raw backup (CSV)</button></div>';
   h+='<div class="card" style="border:1px solid #f1b4b4"><h2 style="color:#a32d2d">Clear data</h2><div class="note">Deleted data cannot be brought back. Download the CSV first if you need a copy. Names and PINs are not touched.</div>'+
     '<label>What to clear</label><select id="clr_mode" onchange="clrMode()"><option value="assoc">One associate (all entries and MTD brought forward)</option><option value="date">One date (all associates)</option><option value="all">Everything (all entries and MTD brought forward)</option></select>'+
     '<div id="clr_assoc"><label>Associate</label><select id="clr_a">'+S.assocs.map(a=>'<option value="'+a.id+'">'+esc(a.name)+'</option>').join('')+'</select></div>'+
@@ -510,6 +510,173 @@ async function saveOpenings(){
   const rows=reporters().map(a=>({associate_id:a.id,month:m,amount:+($('#op_'+a.id).value||0)}));
   try{await api('mtd_openings?on_conflict=associate_id,month',{method:'POST',body:rows,prefer:'resolution=merge-duplicates,return=minimal'});await loadAll();toast('Saved');render()}catch(e){toast('Error: '+e.message,5000)}
 }
+/* ---------- excel (.xlsx) report: no library, hand-built zip ---------- */
+const XL={
+  crcT:(function(){const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})(),
+  crc(b){let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=XL.crcT[(c^b[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0},
+  zip(files){
+    const enc=new TextEncoder(),parts=[],cd=[];let off=0;
+    const u16=v=>[v&255,(v>>>8)&255],u32=v=>[v&255,(v>>>8)&255,(v>>>16)&255,(v>>>24)&255];
+    files.forEach(f=>{
+      const nm=enc.encode(f.name),data=enc.encode(f.data),crc=XL.crc(data);
+      const lh=new Uint8Array([0x50,0x4b,3,4,20,0,0,8,0,0,0,0,0x21,0,...u32(crc),...u32(data.length),...u32(data.length),...u16(nm.length),0,0]);
+      parts.push(lh,nm,data);
+      cd.push({nm:nm,crc:crc,len:data.length,off:off});
+      off+=lh.length+nm.length+data.length;
+    });
+    const cs=off;
+    cd.forEach(c=>{
+      const h=new Uint8Array([0x50,0x4b,1,2,20,0,20,0,0,8,0,0,0,0,0x21,0,...u32(c.crc),...u32(c.len),...u32(c.len),...u16(c.nm.length),0,0,0,0,0,0,0,0,0,0,0,0,...u32(c.off)]);
+      parts.push(h,c.nm);off+=h.length+c.nm.length;
+    });
+    const n=cd.length;
+    parts.push(new Uint8Array([0x50,0x4b,5,6,0,0,0,0,...u16(n),...u16(n),...u32(off-cs),...u32(cs),0,0]));
+    return new Blob(parts,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  },
+  col(i){let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s},
+  serial(d){const p=d.split('-').map(Number);return Math.round((Date.UTC(p[0],p[1]-1,p[2])-Date.UTC(1899,11,30))/86400000)},
+  /* styles: 0 default,1 header,2 text,3 int,4 rupee,5 date,6 lacs,7 pct,8 b-text,9 b-int,10 b-rupee,11 b-lacs,12 b-pct,13 title,14 note */
+  styles(){
+    const bd='<border><left style="thin"><color rgb="FFD0D5E2"/></left><right style="thin"><color rgb="FFD0D5E2"/></right><top style="thin"><color rgb="FFD0D5E2"/></top><bottom style="thin"><color rgb="FFD0D5E2"/></bottom><diagonal/></border>';
+    const rup='[&gt;=10000000]&quot;₹&quot;##\\,##\\,##\\,##0;[&gt;=100000]&quot;₹&quot;##\\,##\\,##0;&quot;₹&quot;#,##0';
+    const x=(n,f,fi,a)=>'<xf numFmtId="'+n+'" fontId="'+f+'" fillId="'+fi+'" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"'+(a?' applyAlignment="1"><alignment '+a+'/></xf>':'/>');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+
+    '<numFmts count="3"><numFmt numFmtId="164" formatCode="'+rup+'"/><numFmt numFmtId="165" formatCode="dd\\ mmm\\ yyyy"/><numFmt numFmtId="166" formatCode="0.00"/></numFmts>'+
+    '<fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="15"/><color rgb="FF14215F"/><name val="Calibri"/></font></fonts>'+
+    '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF14215F"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE8ECF8"/></patternFill></fill></fills>'+
+    '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+bd+'</borders>'+
+    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'+
+    '<cellXfs count="15">'+
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
+    x(0,1,2,'horizontal="center" vertical="center" wrapText="1"')+
+    x(0,0,0)+x(3,0,0)+x(164,0,0)+x(165,0,0,'horizontal="left"')+x(166,0,0)+x(10,0,0)+
+    x(0,2,3)+x(3,2,3)+x(164,2,3)+x(166,2,3)+x(10,2,3)+
+    '<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>'+
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
+    '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  },
+  sheet(rows,widths,opt){
+    opt=opt||{};
+    let x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="'+(opt.hdr||1)+'" topLeftCell="A'+((opt.hdr||1)+1)+'" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="18"/><cols>'+
+      widths.map((w,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" customWidth="1"/>').join('')+'</cols><sheetData>';
+    rows.forEach((r,ri)=>{
+      x+='<row r="'+(ri+1)+'"'+(r.h?' ht="'+r.h+'" customHeight="1"':'')+'>';
+      r.c.forEach((c,ci)=>{
+        if(c==null||c.v===''||c.v==null){if(c&&c.s!=null)x+='<c r="'+XL.col(ci)+(ri+1)+'" s="'+c.s+'"/>';return}
+        const ref=XL.col(ci)+(ri+1);
+        if(typeof c.v==='number')x+='<c r="'+ref+'" s="'+c.s+'"><v>'+c.v+'</v></c>';
+        else x+='<c r="'+ref+'" s="'+c.s+'" t="inlineStr"><is><t xml:space="preserve">'+esc(c.v)+'</t></is></c>';
+      });
+      x+='</row>';
+    });
+    x+='</sheetData>'+(opt.filter?'<autoFilter ref="'+opt.filter+'"/>':'')+'<pageMargins left="0.5" right="0.5" top="0.6" bottom="0.6" header="0.3" footer="0.3"/><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>';
+    return x;
+  },
+  book(sheets){
+    const f=[];
+    f.push({name:'[Content_Types].xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+sheets.map((s,i)=>'<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('')+'</Types>'});
+    f.push({name:'_rels/.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'});
+    f.push({name:'xl/workbook.xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+sheets.map((s,i)=>'<sheet name="'+esc(s.name)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join('')+'</sheets></workbook>'});
+    f.push({name:'xl/_rels/workbook.xml.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+sheets.map((s,i)=>'<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join('')+'<Relationship Id="rId'+(sheets.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'});
+    f.push({name:'xl/styles.xml',data:XL.styles()});
+    sheets.forEach((s,i)=>f.push({name:'xl/worksheets/sheet'+(i+1)+'.xml',data:XL.sheet(s.rows,s.widths,s.opt)}));
+    return XL.zip(f);
+  }
+};
+async function fetchAll(path){
+  let out=[],off=0;
+  for(;;){
+    const r=await api(path+(path.includes('?')?'&':'?')+'limit=1000&offset='+off);
+    out=out.concat(r);if(r.length<1000)break;off+=1000;
+  }
+  return out;
+}
+const H=t=>({v:t,s:1}),TX=t=>({v:t,s:2}),IN=n=>({v:+n||0,s:3}),RP=n=>({v:Math.round(+n||0),s:4}),DT=d=>({v:XL.serial(d),s:5}),LC=n=>({v:Math.round((+n||0)/1000)/100,s:6}),PC=n=>({v:n,s:7});
+async function exportXlsx(){
+  const sel=$('#xl_month')?$('#xl_month').value:today().slice(0,7);
+  toast('Preparing report…',8000);
+  try{
+    let q='daily_entries?select=*&order=entry_date,id',qo='mtd_openings?select=*&order=month,associate_id';
+    if(sel!=='all'){q+='&entry_date=gte.'+sel+'-01&entry_date=lt.'+nextMonth(sel)+'-01';qo+='&month=eq.'+sel}
+    const r=await Promise.all([fetchAll(q),fetchAll(qo)]);
+    const E=r[0],O=r[1],A=S.assocs,by={};A.forEach(a=>by[a.id]=a);
+    const team=new Set(A.filter(counts).map(a=>a.id));
+    const TE=E.filter(e=>team.has(e.associate_id));
+    const rk={};E.forEach(e=>Object.keys(e.reservations||{}).forEach(k=>{if(+e.reservations[k]>0)rk[k]=1}));
+    const RM=Object.keys(rk).sort(),rl=k=>'Reservations - '+monLabel(k)+' '+k.slice(0,4);
+    const resCells=(res,st)=>RM.map(k=>({v:+(res&&res[k])||0,s:st||3})).concat([{v:RM.reduce((t,k)=>t+(+(res&&res[k])||0),0),s:st||3}]);
+    const resHdr=RM.map(k=>H(rl(k))).concat([H('Total reservations')]);
+    const months=Array.from(new Set(TE.map(e=>e.entry_date.slice(0,7)).concat(O.filter(o=>team.has(o.associate_id)).map(o=>o.month)))).sort();
+    const T0=today(),nowM=T0.slice(0,7);
+    const op=(aid,m)=>{const o=O.find(x=>x.associate_id===aid&&x.month===m);return o?+o.amount:0};
+    const label=sel==='all'?'All data':monLabel(sel)+' '+sel.slice(0,4);
+    /* Sheet 1: Team Daily */
+    const s1=[{c:[H('Month'),H('Date'),H('Day'),H('Total leads'),H('Fresh leads sent'),H('Revenue (₹)'),H('Team MTD (₹)'),H('Team MTD (Lacs)'),H('Projected month-end (Lacs)')].concat(resHdr),h:34}];
+    months.forEach(m=>{
+      const dim=daysInMonth(m),last=m===nowM?+T0.slice(8,10):dim;
+      const base=O.filter(o=>o.month===m&&team.has(o.associate_id)).reduce((t,o)=>t+(+o.amount),0);
+      let cum=base;
+      const first=Math.min.apply(null,TE.filter(e=>e.entry_date.slice(0,7)===m).map(e=>+e.entry_date.slice(8,10)).concat([last]));
+      for(let d=first;d<=last;d++){
+        const ds=m+'-'+pad(d),es=TE.filter(e=>e.entry_date===ds);
+        const rev=sum(es,'revenue');cum+=rev;
+        const res={};es.forEach(e=>Object.keys(e.reservations||{}).forEach(k=>{res[k]=(res[k]||0)+(+e.reservations[k]||0)}));
+        const dow=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(ds+'T00:00:00').getDay()];
+        s1.push({c:[TX(monLabel(m)+' '+m.slice(0,4)),DT(ds),TX(dow),IN(sum(es,'total_leads')),IN(sum(es,'fresh_leads')),RP(rev),RP(cum),LC(cum),(d<5&&d<dim?TX('-'):LC(cum/d*dim))].concat(resCells(res))});
+      }
+    });
+    /* Sheet 2: Associate Daily */
+    const s2=[{c:[H('Month'),H('Date'),H('Associate'),H('Total leads'),H('Fresh leads sent'),H('Revenue (₹)'),H('Associate MTD (₹)'),H('Associate MTD (Lacs)')].concat(resHdr),h:34}];
+    const run={};
+    TE.slice().sort((a,b)=>a.entry_date<b.entry_date?-1:a.entry_date>b.entry_date?1:(by[a.associate_id].name<by[b.associate_id].name?-1:1)).forEach(e=>{
+      const m=e.entry_date.slice(0,7),k=e.associate_id+m;
+      if(run[k]==null)run[k]=op(e.associate_id,m);
+    });
+    const cumA={};
+    TE.slice().sort((a,b)=>a.entry_date<b.entry_date?-1:1).forEach(e=>{const m=e.entry_date.slice(0,7),k=e.associate_id+m;if(cumA[k]==null)cumA[k]=op(e.associate_id,m);cumA[k]+=+e.revenue;e._mtd=cumA[k]});
+    TE.slice().sort((a,b)=>a.entry_date<b.entry_date?-1:a.entry_date>b.entry_date?1:(by[a.associate_id].name<by[b.associate_id].name?-1:1)).forEach(e=>{
+      const m=e.entry_date.slice(0,7);
+      s2.push({c:[TX(monLabel(m)+' '+m.slice(0,4)),DT(e.entry_date),TX(by[e.associate_id].name),IN(e.total_leads),IN(e.fresh_leads),RP(e.revenue),RP(e._mtd),LC(e._mtd)].concat(resCells(e.reservations))});
+    });
+    /* Sheet 3: Month Summary */
+    const s3=[{c:[H('Month'),H('Associate'),H('Days entered'),H('Total leads'),H('Fresh leads sent'),H('Revenue from daily entries (₹)'),H('Brought forward (₹)'),H('Month total (₹)'),H('Month total (Lacs)'),H('Avg per entered day (₹)'),H('Projected month-end (Lacs)'),H('Change vs previous month')].concat(resHdr),h:48}];
+    const tot={};
+    months.forEach(m=>{
+      const dim=daysInMonth(m),dayN=m===nowM?+T0.slice(8,10):dim;
+      const ids=A.filter(a=>team.has(a.id)&&(TE.some(e=>e.associate_id===a.id&&e.entry_date.slice(0,7)===m)||op(a.id,m)>0));
+      const T={days:new Set(),leads:0,fresh:0,rev:0,bf:0,res:{}};
+      ids.forEach(a=>{
+        const es=TE.filter(e=>e.associate_id===a.id&&e.entry_date.slice(0,7)===m);
+        const rev=sum(es,'revenue'),bf=op(a.id,m),tt=rev+bf,res={};
+        es.forEach(e=>{T.days.add(e.entry_date);Object.keys(e.reservations||{}).forEach(k=>{res[k]=(res[k]||0)+(+e.reservations[k]||0);T.res[k]=(T.res[k]||0)+(+e.reservations[k]||0)})});
+        T.leads+=sum(es,'total_leads');T.fresh+=sum(es,'fresh_leads');T.rev+=rev;T.bf+=bf;
+        s3.push({c:[TX(monLabel(m)+' '+m.slice(0,4)),TX(a.name),IN(new Set(es.map(e=>e.entry_date)).size),IN(sum(es,'total_leads')),IN(sum(es,'fresh_leads')),RP(rev),RP(bf),RP(tt),LC(tt),RP(es.length?rev/new Set(es.map(e=>e.entry_date)).size:0),LC(tt/dayN*dim),TX('')].concat(resCells(res))});
+      });
+      const tt=T.rev+T.bf;tot[m]=tt;
+      const pm=prevMonth(m),chg=tot[pm]>0?(tt/dayN*dim)/tot[pm]-1:null;
+      s3.push({c:[{v:monLabel(m)+' '+m.slice(0,4),s:8},{v:'TEAM TOTAL',s:8},{v:T.days.size,s:9},{v:T.leads,s:9},{v:T.fresh,s:9},{v:Math.round(T.rev),s:10},{v:Math.round(T.bf),s:10},{v:Math.round(tt),s:10},{v:Math.round(tt/1000)/100,s:11},{v:'',s:8},{v:Math.round(tt/dayN*dim/1000)/100,s:11},chg==null?{v:'-',s:8}:{v:chg,s:12}].concat(RM.map(k=>({v:T.res[k]||0,s:9})),[{v:RM.reduce((t,k)=>t+(T.res[k]||0),0),s:9}])});
+    });
+    /* Sheet 4: Raw data */
+    const s4=[{c:[H('Date'),H('Associate'),H('Counted in team total'),H('Total leads'),H('Fresh leads sent'),H('Revenue (₹)'),H('Reservations (stay month: count)')],h:34}];
+    E.slice().sort((a,b)=>a.entry_date<b.entry_date?-1:1).forEach(e=>{
+      const a=by[e.associate_id]||{name:'?'};
+      s4.push({c:[DT(e.entry_date),TX(a.name),TX(team.has(e.associate_id)?'Yes':'No'),IN(e.total_leads),IN(e.fresh_leads),RP(e.revenue),TX(Object.keys(e.reservations||{}).sort().filter(k=>+e.reservations[k]>0).map(k=>k+': '+e.reservations[k]).join('  |  '))]});
+    });
+    s4.push({c:[]});s4.push({c:[{v:'Brought forward before the app was used',s:8}]});
+    O.forEach(o=>s4.push({c:[TX(monLabel(o.month)+' '+o.month.slice(0,4)),TX((by[o.associate_id]||{}).name||'?'),TX(team.has(o.associate_id)?'Yes':'No'),{v:'',s:2},{v:'',s:2},RP(o.amount)]}));
+    const wr=RM.map(()=>16).concat([14]);
+    const sheets=[
+      {name:'Team Daily',rows:s1,widths:[14,13,7,12,13,15,16,13,16].concat(wr),opt:{filter:'A1:'+XL.col(8+wr.length)+s1.length}},
+      {name:'Associate Daily',rows:s2,widths:[14,13,24,12,13,15,16,14].concat(wr),opt:{filter:'A1:'+XL.col(7+wr.length)+s2.length}},
+      {name:'Month Summary',rows:s3,widths:[14,24,10,12,13,18,16,16,13,16,16,14].concat(wr),opt:{filter:'A1:'+XL.col(11+wr.length)+s3.length}},
+      {name:'Raw Data',rows:s4,widths:[14,24,14,12,13,15,40],opt:{}}
+    ];
+    const blob=XL.book(sheets),a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);a.download='GCC-sales-'+TEAM_NAME.replace(/\s+/g,'-')+'-'+(sel==='all'?'all-data':sel)+'.xlsx';
+    document.body.appendChild(a);a.click();a.remove();toast('Report downloaded ('+label+')');
+  }catch(e){toast('Error: '+e.message,6000)}
+}
+
 async function exportCsv(){
   try{
     const rows=await api('daily_entries?select=entry_date,total_leads,fresh_leads,revenue,reservations,associates(name,team)&order=entry_date');
