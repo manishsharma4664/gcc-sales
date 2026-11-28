@@ -70,7 +70,7 @@ textarea{width:100%;font-size:15px;padding:10px;border:1px solid #cfd6e6;border-
 const SUPABASE_URL='https://pfioweulcnuaeumddals.supabase.co';
 const SUPABASE_KEY='sb_publishable_PsdVIkCf_BRD6Obk1eunNw_JTmyPdnk';
 const TEAM_NAME='Email team';
-const VERSION='v4 - 21 Nov 2026';
+const VERSION='v5 - 28 Nov 2026';
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -584,6 +584,36 @@ function reportHtml(m,cur,prev){
     '<div style="font-size:12px;color:#6b7280;margin-top:6px">Tallest day: '+fmtLacs(mx>1?mx:0)+'</div></div>';
   return h;
 }
+function persOptions(m,cur){
+  if(!S.me.is_lead)return [S.me];
+  return S.assocs.filter(a=>counts(a)||cur.e.some(e=>e.associate_id===a.id));
+}
+function personHtml(m,cur){
+  const list=persOptions(m,cur);
+  if(!list.length)return '';
+  let pid=S.repPerson;if(!list.some(a=>a.id===pid))pid=list[0].id;
+  const a=list.find(x=>x.id===pid);
+  const es=cur.e.filter(e=>e.associate_id===pid).sort((x,y)=>x.entry_date<y.entry_date?-1:1);
+  const o=cur.o.find(x=>x.associate_id===pid),open=o?+o.amount:0;
+  const rev=sum(es,'revenue'),total=rev+open,dim=daysInMonth(m);
+  const isCur=m===today().slice(0,7),dayNow=+today().slice(8,10);
+  const daily=new Array(dim).fill(0);es.forEach(e=>{daily[+e.entry_date.slice(8,10)-1]+=+e.revenue});
+  const mx=Math.max.apply(null,daily.concat([1]));
+  let h='<div class="card"><h2>'+(S.me.is_lead?'Associate daily':'My daily')+' revenue</h2>';
+  if(S.me.is_lead)h+='<select onchange="S.repPerson=this.value;showPerson()">'+list.map(x=>'<option value="'+x.id+'"'+(x.id===pid?' selected':'')+'>'+esc(x.name)+'</option>').join('')+'</select>';
+  h+='<div class="grid2" style="margin-top:10px">'+
+    '<div class="stat"><small>Revenue (month)</small><b>'+fmtLacs(total)+'</b></div>'+
+    '<div class="stat" style="border-color:#6250d6"><small>Days entered</small><b>'+es.length+'</b></div></div>';
+  if(open>0)h+='<div class="note">Includes '+fmtLacs(open)+' brought forward before the app was used.</div>';
+  if(isCur&&total>0)h+='<div class="note">Projected month-end: <b>'+fmtLacs(total/dayNow*dim)+'</b></div>';
+  if(!es.length)return h+'<div style="color:#6b7280;margin-top:8px">No daily entries this month.</div></div>';
+  h+='<div class="bars" style="gap:2px;height:120px;margin-top:10px">'+daily.map((v,i)=>{const d=i+1,t=isCur&&d===dayNow;return '<div class="'+(t?'t':'')+'" style="font-size:9px"><i style="height:'+(v>0?Math.max(3,v/mx*100):1)+'px"></i>'+((d===1||d%5===0)?d:'&nbsp;')+'</div>'}).join('')+'</div>';
+  h+='<table style="margin-top:10px"><tr><th>Date</th><th>Leads</th><th>Fresh</th><th>Revenue</th></tr>'+
+    es.map(e=>'<tr><td>'+(+e.entry_date.slice(8,10))+' '+monLabel(m).slice(0,3)+'</td><td>'+e.total_leads+'</td><td>'+e.fresh_leads+'</td><td>&#8377;'+fmtINR(e.revenue)+'</td></tr>').join('')+
+    '<tr><td><b>Total</b></td><td><b>'+sum(es,'total_leads')+'</b></td><td><b>'+sum(es,'fresh_leads')+'</b></td><td><b>&#8377;'+fmtINR(rev)+'</b></td></tr></table></div>';
+  return h;
+}
+function showPerson(){const b=$('#persbox');if(b&&S.repCur)b.innerHTML=personHtml(S.repCur.m,S.repCur.d)}
 function viewReports(){
   const sel=S.repMonth||today().slice(0,7);
   setTimeout(loadReport,0);
@@ -597,7 +627,7 @@ async function loadReport(){
   try{
     const r=await Promise.all([fetchMonth(m),fetchMonth(prevMonth(m))]);
     if(S.tab!=='reports'||$('#repbody')!==box)return;
-    box.innerHTML=reportHtml(m,r[0],r[1]);
+    S.repCur={m:m,d:r[0]};box.innerHTML='<div id="persbox">'+personHtml(m,r[0])+'</div>'+reportHtml(m,r[0],r[1]);
   }catch(e){box.innerHTML='<div class="err">Could not load report: '+esc(e.message)+'</div>'}
 }
 
