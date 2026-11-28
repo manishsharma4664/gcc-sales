@@ -602,16 +602,17 @@ async function exportXlsx(){
     const E=r[0],O=r[1],A=S.assocs,by={};A.forEach(a=>by[a.id]=a);
     const team=new Set(A.filter(counts).map(a=>a.id));
     const TE=E.filter(e=>team.has(e.associate_id));
-    const rk={};E.forEach(e=>Object.keys(e.reservations||{}).forEach(k=>{if(+e.reservations[k]>0)rk[k]=1}));
-    const RM=Object.keys(rk).sort(),rl=k=>'Reservations - '+monLabel(k)+' '+k.slice(0,4);
-    const resCells=(res,st)=>RM.map(k=>({v:+(res&&res[k])||0,s:st||3})).concat([{v:RM.reduce((t,k)=>t+(+(res&&res[k])||0),0),s:st||3}]);
-    const resHdr=RM.map(k=>H(rl(k))).concat([H('Total reservations')]);
+    const resKeys=res=>Object.keys(res||{}).filter(k=>+res[k]>0).sort();
+    const resTxt=res=>resKeys(res).map(k=>monLabel(k)+' '+k.slice(0,4)+': '+res[k]).join('  |  ')||'-';
+    const resTot=res=>resKeys(res).reduce((t,k)=>t+(+res[k]),0);
+    const resCells=res=>[TX(resTxt(res)),IN(resTot(res))];
+    const resHdr=[H('Reservations by stay month'),H('Total reservations')];
     const months=Array.from(new Set(TE.map(e=>e.entry_date.slice(0,7)).concat(O.filter(o=>team.has(o.associate_id)).map(o=>o.month)))).sort();
     const T0=today(),nowM=T0.slice(0,7);
     const op=(aid,m)=>{const o=O.find(x=>x.associate_id===aid&&x.month===m);return o?+o.amount:0};
     const label=sel==='all'?'All data':monLabel(sel)+' '+sel.slice(0,4);
     /* Sheet 1: Team Daily */
-    const s1=[{c:[H('Month'),H('Date'),H('Day'),H('Total leads'),H('Fresh leads sent'),H('Revenue (₹)'),H('Team MTD (₹)'),H('Team MTD (Lacs)'),H('Projected month-end (Lacs)')].concat(resHdr),h:34}];
+    const s1=[{c:[H('Month'),H('Date'),H('Day'),H('Total leads'),H('Fresh leads sent'),H('Revenue (₹)'),H('Team MTD (₹)'),H('Team MTD (Lacs)')].concat(resHdr),h:34}];
     months.forEach(m=>{
       const dim=daysInMonth(m),last=m===nowM?+T0.slice(8,10):dim;
       const base=O.filter(o=>o.month===m&&team.has(o.associate_id)).reduce((t,o)=>t+(+o.amount),0);
@@ -622,7 +623,7 @@ async function exportXlsx(){
         const rev=sum(es,'revenue');cum+=rev;
         const res={};es.forEach(e=>Object.keys(e.reservations||{}).forEach(k=>{res[k]=(res[k]||0)+(+e.reservations[k]||0)}));
         const dow=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(ds+'T00:00:00').getDay()];
-        s1.push({c:[TX(monLabel(m)+' '+m.slice(0,4)),DT(ds),TX(dow),IN(sum(es,'total_leads')),IN(sum(es,'fresh_leads')),RP(rev),RP(cum),LC(cum),(d<5&&d<dim?TX('-'):LC(cum/d*dim))].concat(resCells(res))});
+        s1.push({c:[TX(monLabel(m)+' '+m.slice(0,4)),DT(ds),TX(dow),IN(sum(es,'total_leads')),IN(sum(es,'fresh_leads')),RP(rev),RP(cum),LC(cum)].concat(resCells(res))});
       }
     });
     /* Sheet 2: Associate Daily */
@@ -639,7 +640,7 @@ async function exportXlsx(){
       s2.push({c:[TX(monLabel(m)+' '+m.slice(0,4)),DT(e.entry_date),TX(by[e.associate_id].name),IN(e.total_leads),IN(e.fresh_leads),RP(e.revenue),RP(e._mtd),LC(e._mtd)].concat(resCells(e.reservations))});
     });
     /* Sheet 3: Month Summary */
-    const s3=[{c:[H('Month'),H('Associate'),H('Days entered'),H('Total leads'),H('Fresh leads sent'),H('Revenue from daily entries (₹)'),H('Brought forward (₹)'),H('Month total (₹)'),H('Month total (Lacs)'),H('Avg per entered day (₹)'),H('Projected month-end (Lacs)'),H('Change vs previous month')].concat(resHdr),h:48}];
+    const s3=[{c:[H('Month'),H('Associate'),H('Days entered'),H('Total leads'),H('Fresh leads sent'),H('Revenue from daily entries (₹)'),H('Brought forward (₹)'),H('Month total (₹)'),H('Month total (Lacs)'),H('Avg per entered day (₹)')].concat(resHdr),h:48}];
     const tot={};
     months.forEach(m=>{
       const dim=daysInMonth(m),dayN=m===nowM?+T0.slice(8,10):dim;
@@ -650,11 +651,10 @@ async function exportXlsx(){
         const rev=sum(es,'revenue'),bf=op(a.id,m),tt=rev+bf,res={};
         es.forEach(e=>{T.days.add(e.entry_date);Object.keys(e.reservations||{}).forEach(k=>{res[k]=(res[k]||0)+(+e.reservations[k]||0);T.res[k]=(T.res[k]||0)+(+e.reservations[k]||0)})});
         T.leads+=sum(es,'total_leads');T.fresh+=sum(es,'fresh_leads');T.rev+=rev;T.bf+=bf;
-        s3.push({c:[TX(monLabel(m)+' '+m.slice(0,4)),TX(a.name),IN(new Set(es.map(e=>e.entry_date)).size),IN(sum(es,'total_leads')),IN(sum(es,'fresh_leads')),RP(rev),RP(bf),RP(tt),LC(tt),RP(es.length?rev/new Set(es.map(e=>e.entry_date)).size:0),LC(tt/dayN*dim),TX('')].concat(resCells(res))});
+        s3.push({c:[TX(monLabel(m)+' '+m.slice(0,4)),TX(a.name),IN(new Set(es.map(e=>e.entry_date)).size),IN(sum(es,'total_leads')),IN(sum(es,'fresh_leads')),RP(rev),RP(bf),RP(tt),LC(tt),RP(es.length?rev/new Set(es.map(e=>e.entry_date)).size:0),].concat(resCells(res))});
       });
       const tt=T.rev+T.bf;tot[m]=tt;
-      const pm=prevMonth(m),chg=tot[pm]>0?(tt/dayN*dim)/tot[pm]-1:null;
-      s3.push({c:[{v:monLabel(m)+' '+m.slice(0,4),s:8},{v:'TEAM TOTAL',s:8},{v:T.days.size,s:9},{v:T.leads,s:9},{v:T.fresh,s:9},{v:Math.round(T.rev),s:10},{v:Math.round(T.bf),s:10},{v:Math.round(tt),s:10},{v:Math.round(tt/1000)/100,s:11},{v:'',s:8},{v:Math.round(tt/dayN*dim/1000)/100,s:11},chg==null?{v:'-',s:8}:{v:chg,s:12}].concat(RM.map(k=>({v:T.res[k]||0,s:9})),[{v:RM.reduce((t,k)=>t+(T.res[k]||0),0),s:9}])});
+      s3.push({c:[{v:monLabel(m)+' '+m.slice(0,4),s:8},{v:'TEAM TOTAL',s:8},{v:T.days.size,s:9},{v:T.leads,s:9},{v:T.fresh,s:9},{v:Math.round(T.rev),s:10},{v:Math.round(T.bf),s:10},{v:Math.round(tt),s:10},{v:Math.round(tt/1000)/100,s:11},{v:'',s:8},{v:resTxt(T.res),s:8},{v:resTot(T.res),s:9}]});
     });
     /* Sheet 4: Raw data */
     const s4=[{c:[H('Date'),H('Associate'),H('Counted in team total'),H('Total leads'),H('Fresh leads sent'),H('Revenue (₹)'),H('Reservations (stay month: count)')],h:34}];
@@ -664,11 +664,11 @@ async function exportXlsx(){
     });
     s4.push({c:[]});s4.push({c:[{v:'Brought forward before the app was used',s:8}]});
     O.forEach(o=>s4.push({c:[TX(monLabel(o.month)+' '+o.month.slice(0,4)),TX((by[o.associate_id]||{}).name||'?'),TX(team.has(o.associate_id)?'Yes':'No'),{v:'',s:2},{v:'',s:2},RP(o.amount)]}));
-    const wr=RM.map(()=>16).concat([14]);
+    const wr=[44,14];
     const sheets=[
-      {name:'Team Daily',rows:s1,widths:[14,13,7,12,13,15,16,13,16].concat(wr),opt:{filter:'A1:'+XL.col(8+wr.length)+s1.length}},
+      {name:'Team Daily',rows:s1,widths:[14,13,7,12,13,15,16,13].concat(wr),opt:{filter:'A1:'+XL.col(7+wr.length)+s1.length}},
       {name:'Associate Daily',rows:s2,widths:[14,13,24,12,13,15,16,14].concat(wr),opt:{filter:'A1:'+XL.col(7+wr.length)+s2.length}},
-      {name:'Month Summary',rows:s3,widths:[14,24,10,12,13,18,16,16,13,16,16,14].concat(wr),opt:{filter:'A1:'+XL.col(11+wr.length)+s3.length}},
+      {name:'Month Summary',rows:s3,widths:[14,24,10,12,13,18,16,16,13,16].concat(wr),opt:{filter:'A1:'+XL.col(9+wr.length)+s3.length}},
       {name:'Raw Data',rows:s4,widths:[14,24,14,12,13,15,40],opt:{}}
     ];
     const blob=XL.book(sheets),a=document.createElement('a');
